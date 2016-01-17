@@ -1,1 +1,1 @@
-This is a UPnP Media Player and controlloer for the Tingbot
+This is a UPnP Media Player and controller for the Tingbot
