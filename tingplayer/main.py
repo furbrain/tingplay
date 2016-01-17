@@ -6,7 +6,7 @@ from layout import NOTEBOOK_BUTTON_SIZE,MAIN_PANEL
 import library
 tingbot.screen.fill("black")
 lib_button = gui.ToggleButton((310,0),NOTEBOOK_BUTTON_SIZE,align="topright",label="Library")
-lib_panel = library.get_library_panel()
+lib_panel = library.LibraryPanel()
 
 playlist_button = gui.ToggleButton((160,0),NOTEBOOK_BUTTON_SIZE,align="top",label="Playlist")
 playlist_panel = gui.Panel(MAIN_PANEL.center,MAIN_PANEL.size)
