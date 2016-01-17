@@ -1,0 +1,27 @@
+*.py[cod]
+
+# C extensions
+*.so
+
+# virtualenv
+/env
+
+# Sphinx
+docs/_build
+
+*~
+
+#Build Folders
+build/
+dist/
+tingbot_gui.egg-info/
+
+#coverage files
+htmlcov/
+.coverage
+
+#my local demo files
+/*demo.py
+
+#my local docs
+/local_docs
