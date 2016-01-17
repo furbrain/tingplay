@@ -65,7 +65,6 @@ ST: %s\r
 
 def get_devices(target="ssdp:all"):
     port = search(target)
-    port = search()
     thread = init_server(port)
     time.sleep(5)
     thread.shutdown()
