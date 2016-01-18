@@ -66,7 +66,7 @@ ST: %s\r
 def get_devices(target="ssdp:all"):
     port = search(target)
     thread = init_server(port)
-    time.sleep(5)
+    time.sleep(4)
     thread.shutdown()
     thread.server_close()
     d = [device.Device(x['url']) for x in found_devices.values() if 'url' in x]

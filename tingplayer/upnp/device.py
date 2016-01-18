@@ -9,16 +9,18 @@ def parseXMLURL(url):
     """given a url downloads it and parses it, discarding namespace shenanigans"""
     """returns an ElementTree root node"""
     data = urllib2.urlopen(url).read()
-    data = re.sub('<(/?)[a-zA-Z_-]*?:',r'<\1',data)
+    data = re.sub(u'<(/?)[a-zA-Z_-]*?:',u'<\\1',data)
     return parseXML(data)
 
 def parseXML(data):
     """given data, parses as XML, discarding namespace shenanigans"""
     """returns an ElementTree root node"""
+    if isinstance(data,unicode):
+        data = data.encode('utf-8')
     it = ET.iterparse(StringIO(data))
     for _, el in it:
-        if '}' in el.tag:
-            el.tag = el.tag.split('}', 1)[1]  # strip all namespaces
+        if u'}' in el.tag:
+            el.tag = el.tag.split(u'}', 1)[1]  # strip all namespaces
     return it.root
     
 def xml_make_dict(node):
@@ -49,7 +51,8 @@ class ServiceBase(object):
         req = urllib2.Request(self._controlURL,data,
                               {'SOAPACTION':self._service_desc['serviceType']+"#"+name,
                                'CONTENT-TYPE': 'text/xml; charset="UTF-8"'})
-        return urllib2.urlopen(req).read()
+        response = urllib2.urlopen(req)
+        return response.read()
 
 def get_action(action,state_vars,defaults):
     in_vars = []
@@ -73,12 +76,10 @@ def get_action(action,state_vars,defaults):
             else:
                 out_vars += [arg_name]
     def f(self,**kwargs):
-        temp_kwargs = default_vars
+        temp_kwargs = default_vars.copy()
         temp_kwargs.update(kwargs)
         assert set(temp_kwargs.keys())==set(in_vars)
-        print "1"
         results = parseXML(self._call_action(name,**temp_kwargs))
-        print "2"
         result_dct = {}
         for x in results.find('.//BrowseResponse'):
             result_dct[x.tag] = x.text
