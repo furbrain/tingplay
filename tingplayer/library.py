@@ -1,4 +1,5 @@
 import threading
+import copy
 import tingbot_gui as gui
 from layout import MAIN_PANEL
 import upnp.search
@@ -19,7 +20,6 @@ class LibraryPanel(gui.Panel):
         self.library = None
         
     def library_selected(self,name,library):
-        print "library selected: " + name
         self.library=library
         results = self.library.ContentDirectory.Browse()
         self.show_browse_results(results)
@@ -30,25 +30,30 @@ class LibraryPanel(gui.Panel):
         self.show_browse_results(results)
 
     def browse_item_callback(self,item):
-        print item.find('title').text
+        print "Play: " + item.find('title').text
         
     def show_browse_results(self,results):
+        dir_style = copy.copy(self.style)
+        dir_style.button_text_color=(0,255,255)
         results = upnp.device.parseXML(results['Result'])
         containers = results.findall("container")
         items = results.findall("item")
         self.entries.scrolled_area.remove_all()
         self.entries.resize_canvas((300,3+30*(len(containers)+len(items))))
-        print len(containers)
-        for i,c in enumerate(containers):
-            gui.PopupButton((0,30*i), (300,30), align="topleft",
+        index = 0
+        for c in containers:
+            gui.PopupButton((0,30*index), (300,30), align="topleft",
                             parent=self.entries.scrolled_area,
+                            style=dir_style,
                             label=c.find('title').text,
                             callback = lambda c=c: self.browse_callback(c))
-        for i,c in enumerate(items):
-            gui.PopupButton((0,30*i), (300,30), align="topleft",
+            index += 1
+        for c in items:
+            gui.PopupButton((0,30*index), (300,30), align="topleft",
                             parent=self.entries.scrolled_area,
                             label=c.find('title').text,
                             callback = lambda c=c: self.browse_item_callback(c))
+            index += 1
         self.entries.update(downwards=True)
         
     def find_libraries(self):
