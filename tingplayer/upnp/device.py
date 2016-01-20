@@ -47,9 +47,9 @@ class ServiceBase(object):
         actionName = ET.SubElement(body,'u:%s' % name,{'xmlns:u':self._service_desc['serviceType']})
         for arg,value in kwargs.items():
             ET.SubElement(actionName,arg).text = unicode(value)
-        data = ET.tostring(request,encoding="UTF-8")
+        data = ET.tostring(request,encoding="utf-8")
         req = urllib2.Request(self._controlURL,data,
-                              {'SOAPACTION':self._service_desc['serviceType']+"#"+name,
+                              {'SOAPACTION':'"'+self._service_desc['serviceType']+"#"+name+'"',
                                'CONTENT-TYPE': 'text/xml; charset="UTF-8"'})
         response = urllib2.urlopen(req)
         return response.read()
@@ -107,9 +107,9 @@ def get_service(url,service_desc):
         'RenderingControl':{'InstanceID':0,'Channel':'Master'},
         'AVTransport':     {'InstanceID':0,'TransportPlaySpeed':"1",'CurrentPlayMode':'Normal'},
     }
-    url = urlparse.urljoin(url,service_desc['SCPDURL'])
+    scpd_url = urlparse.urljoin(url,service_desc['SCPDURL'])
     try:
-        root = parseXMLURL(url)
+        root = parseXMLURL(scpd_url)
     except urllib2.HTTPError:
         return None
     #find all state Variables
