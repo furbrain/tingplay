@@ -1,5 +1,7 @@
 import threading
 import copy
+import urllib2
+
 import tingbot_gui as gui
 from layout import MAIN_PANEL
 import upnp.search
@@ -19,15 +21,30 @@ class LibraryPanel(gui.Panel):
         thread.start()
         self.library = None
         
+    def browse(self,ObjectID="0"):
+        try:
+            results = self.library.ContentDirectory.Browse(ObjectID=ObjectID)
+        except urllib2.HTTPError:
+            if len(self.library.friendlyName)>10:
+                name = self.library.friendlyName[:10]+'...'
+            else:
+                name = self.library.friendlyName
+            gui.MessageBox(message=name + " not responding")
+            return None
+        return results
+            
+        
     def library_selected(self,name,library):
         self.library=library
-        results = self.library.ContentDirectory.Browse()
-        self.show_browse_results(results)
+        results = self.browse()
+        if results:
+            self.show_browse_results(results)
         
     def browse_callback(self,container):
         obj_id = container.attrib['id']
-        results = self.library.ContentDirectory.Browse(ObjectID=obj_id)
-        self.show_browse_results(results)
+        results = self.browse(ObjectID=obj_id)
+        if results:
+            self.show_browse_results(results)
 
     def browse_item_callback(self,item):
         print "Play: " + item.find('title').text
