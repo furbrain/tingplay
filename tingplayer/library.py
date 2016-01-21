@@ -63,13 +63,14 @@ class LibraryPanel(gui.Panel):
                             parent=self.entries.scrolled_area,
                             style=dir_style,
                             label=c.find('title').text,
-                            callback = lambda c=c: self.browse_callback(c))
+                            callback = partial(self.click_container,c),
+                            long_click_callback = partial(self.long_click_container,c))
             index += 1
         for c in items:
             gui.PopupButton((0,30*index), (300,30), align="topleft",
                             parent=self.entries.scrolled_area,
                             label=c.find('title').text,
-                            callback = lambda c=c: self.browse_item_callback(c))
+                            callback = partial(self.click_item,c))
             index += 1
         self.entries.update(downwards=True)
         
