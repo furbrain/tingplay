@@ -1,6 +1,6 @@
 import threading
-import copy
 import urllib2
+from functools import partial
 
 import tingbot_gui as gui
 from layout import MAIN_PANEL
@@ -8,8 +8,8 @@ import upnp.search
 import upnp.device
 
 class LibraryPanel(gui.Panel):
-    def __init__(self):
-        super(gui.Panel,self).__init__(MAIN_PANEL.topleft,MAIN_PANEL.size,align="topleft")
+    def __init__(self,playlist_panel):
+        super(LibraryPanel,self).__init__(MAIN_PANEL.topleft,MAIN_PANEL.size,align="topleft")
         #library selector goes on the top, aligned to top right
         self.entries = gui.ScrollArea((0,30),(320,MAIN_PANEL.height-30),parent=self, align="topleft",canvas_size=(10,10))
         self.library_dropdown = gui.DropDown((320,0),(260,30),align="topright",
@@ -20,6 +20,7 @@ class LibraryPanel(gui.Panel):
         thread = threading.Thread(target=self.find_libraries)
         thread.start()
         self.library = None
+        self.playlist_panel=playlist_panel
         
     def browse(self,ObjectID="0"):
         try:
@@ -35,22 +36,37 @@ class LibraryPanel(gui.Panel):
             
         
     def library_selected(self,name,library):
-        self.library=library
-        results = self.browse()
-        if results:
-            self.show_browse_results(results)
+        if library:
+            self.library=library
+            results = self.browse()
+            if results:
+                self.show_browse_results(results)
         
-    def browse_callback(self,container):
+    def click_container(self,container):
         obj_id = container.attrib['id']
         results = self.browse(ObjectID=obj_id)
         if results:
             self.show_browse_results(results)
 
-    def browse_item_callback(self,item):
-        print "Play: " + item.find('title').text
+    def click_item(self,item):
+        gui.PopupMenu(xy = (100,60), menu_items = [
+            ("Play",lambda: self.playlist_panel.play_tracks([item])),
+            ("Enqueue",lambda: self.playlist_panel.enqueue_tracks([item]))])
+        
+    def get_container_tracks(self,container):
+        results = self.browse(container.attrib['id'])
+        results = upnp.device.parseXML(results['Result'])
+        items = results.findall("item")
+        return items
+        
+    def long_click_container(self,container):
+        tracks = self.get_container_tracks(container)
+        gui.PopupMenu(xy = (100,60), menu_items = [
+            ("Play All",lambda: self.playlist_panel.play_tracks(tracks)),
+            ("Enqueue All",lambda: self.playlist_panel.enqueue_tracks(tracks))])
         
     def show_browse_results(self,results):
-        dir_style = copy.copy(self.style)
+        dir_style = self.style.copy()
         dir_style.button_text_color=(0,255,255)
         results = upnp.device.parseXML(results['Result'])
         containers = results.findall("container")
