@@ -17,8 +17,6 @@ class LibraryPanel(gui.Panel):
                                         values=[(" -- ",None)],
                                         callback=self.library_selected)
         library_label = gui.StaticText((0,0),(60,30),align="topleft",parent=self, label = "Library:",text_align="right")
-        thread = threading.Thread(target=self.find_libraries)
-        thread.start()
         self.library = None
         self.playlist_panel=playlist_panel
         
@@ -90,10 +88,11 @@ class LibraryPanel(gui.Panel):
             index += 1
         self.entries.update(downwards=True)
         
-    def find_libraries(self):
-        libs = upnp.search.get_devices('urn:schemas-upnp-org:device:MediaServer:1')
-        self.library_dropdown.values = [(d.friendlyName,d) for d in libs]
-        self.library_dropdown.selected = ("Select Library",None)
+    def add_library(self,library):
+        if self.library_dropdown.values == [(" -- ",None)]:
+            self.library_dropdown.values[:] = []
+            self.library_dropdown.selected = ("Select Library",None)
+        self.library_dropdown.values.append((library.friendlyName,library))
         self.library_dropdown.update()
     
     

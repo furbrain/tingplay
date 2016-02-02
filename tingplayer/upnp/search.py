@@ -7,6 +7,9 @@ import threading
 import device
 
 found_devices = {}
+reported_devices = []
+
+device_found_callback=None
 
 class SSDPHandler(SocketServer.BaseRequestHandler):
     """Listens for SSDP responses/notifications, and keeps the devices dict up to date"""
@@ -24,6 +27,10 @@ class SSDPHandler(SocketServer.BaseRequestHandler):
                 if usn_bits[5]=='device':
                     found_devices[uuid]['device'] = usn_bits[6]
                     found_devices[uuid]['url'] = fields['LOCATION']
+                    if uuid not in reported_devices:
+                        reported_devices.append(uuid)
+                        if device_found_callback:
+                            device_found_callback(found_devices[uuid])
                 if usn_bits[5]=='service':
                     found_devices[uuid]['services'] += [usn_bits[6]]
                     
@@ -31,9 +38,9 @@ class ThreadedUDPServer(SocketServer.ThreadingMixIn, SocketServer.UDPServer):
     pass
         
 def init_server(port):
-    server = ThreadedUDPServer(("192.168.1.28",port),SSDPHandler)
+    server = ThreadedUDPServer(('',port),SSDPHandler)
     thread = threading.Thread(target=server.serve_forever)
-    thread.dameon = True
+    thread.daemon = True
     thread.start()
     return server
         
@@ -71,6 +78,14 @@ def get_devices(target="ssdp:all"):
     thread.server_close()
     d = [device.Device(x['url']) for x in found_devices.values() if 'url' in x]
     return d
+
+def threaded_device_discovery(cb,target="ssdp:all"):
+    global device_found_callback
+    device_found_callback=cb
+    port = search(target)
+    server = init_server(port)
+    return server
+    
 
 if __name__=="__main__":
     #port = search("upnp:rootdevice")
