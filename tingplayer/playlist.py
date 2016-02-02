@@ -3,8 +3,9 @@ from functools import partial
 from layout import MAIN_PANEL
 
 class PlaylistPanel(gui.ScrollArea):
-    def __init__(self):
+    def __init__(self,current_panel):
         super(PlaylistPanel,self).__init__(MAIN_PANEL.topleft,MAIN_PANEL.size,align="topleft",canvas_size=(10,10))
+        self.current_panel = current_panel
         self.playlist = [] # a list of upnp items
         self.current_track = 0
         
@@ -17,6 +18,7 @@ class PlaylistPanel(gui.ScrollArea):
     def click_track(self,index):
         self.current_track = index
         print "Playing " + self.playlist[index].find('title').text
+        self.current_panel.play(self.playlist[index])
         self.refresh_list()
         
     def enqueue_tracks(self,tracks):
