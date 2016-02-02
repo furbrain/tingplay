@@ -81,7 +81,7 @@ def get_action(action,state_vars,defaults):
         assert set(temp_kwargs.keys())==set(in_vars)
         results = parseXML(self._call_action(name,**temp_kwargs))
         result_dct = {}
-        for x in results.find('.//BrowseResponse'):
+        for x in results.find('.//'+name+'Response'):
             result_dct[x.tag] = x.text
         return result_dct
         
@@ -105,7 +105,8 @@ def get_service(url,service_desc):
         'ContentDirectory':{'ObjectID':'0','SearchCriteria':'*','BrowseFlag':'BrowseDirectChildren',
                              'Filter':'*','SortCriteria':'','Index':0,'Count':0},
         'RenderingControl':{'InstanceID':0,'Channel':'Master'},
-        'AVTransport':     {'InstanceID':0,'TransportPlaySpeed':"1",'CurrentPlayMode':'Normal'},
+        'AVTransport':     {'InstanceID':0,'TransportPlaySpeed':"1",'CurrentPlayMode':'Normal',
+                            'CurrentURIMetaData':'','NextURIMetaData':''},
     }
     scpd_url = urlparse.urljoin(url,service_desc['SCPDURL'])
     try:
