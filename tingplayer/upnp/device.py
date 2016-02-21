@@ -5,6 +5,9 @@ import xml.etree.ElementTree as ET
 from StringIO import StringIO
 import re
 
+class UPnPError(IOError):
+    """Error raised by remote UPnP Server"""
+
 def parseXMLURL(url):
     """given a url downloads it and parses it, discarding namespace shenanigans"""
     """returns an ElementTree root node"""
@@ -34,10 +37,11 @@ def xml_make_dict(node):
     
     
 class ServiceBase(object):
-    def __init__(self,controlURL,eventURL,service_desc):
+    def __init__(self,controlURL,eventURL,service_desc,state_vars):
         self._controlURL = controlURL
         self._eventURL = eventURL
         self._service_desc = service_desc
+        self.vars = state_vars
         
     def _call_action(self,name,**kwargs):
         request = ET.Element('s:Envelope',
@@ -51,7 +55,17 @@ class ServiceBase(object):
         req = urllib2.Request(self._controlURL,data,
                               {'SOAPACTION':'"'+self._service_desc['serviceType']+"#"+name+'"',
                                'CONTENT-TYPE': 'text/xml; charset="UTF-8"'})
-        response = urllib2.urlopen(req)
+        try:
+            response = urllib2.urlopen(req)
+        except urllib2.HTTPError as err:
+            print err.code
+            if err.code==500:
+                response = parseXML(err.read())
+                code = response.find('.//errorCode').text
+                desc = response.find('.//errorDescription').text
+                raise UPnPError(code,desc)
+            else:
+                raise
         return response.read()
 
 def get_action(action,state_vars,defaults):
@@ -67,7 +81,7 @@ def get_action(action,state_vars,defaults):
             fields = xml_make_dict(arg)
             arg_name = fields['name']
             field_name = fields['relatedStateVariable']
-            var_types[arg_name] = state_vars[field_name]
+            var_types[arg_name] = state_vars[field_name]['dataType']
             if fields['direction']=='in':
                 in_vars += [arg_name]
                 key = field_name.replace('A_ARG_TYPE_','')
@@ -116,9 +130,17 @@ def get_service(url,service_desc):
     #find all state Variables
     state_vars = {}
     for var in root.find('serviceStateTable'):
-        name = var.find('name').text.strip()
-        data_type = var.find('dataType').text.strip()
-        state_vars[var.find('name').text.strip()] = data_type
+        attr = dict([(x,var.find(x)) for x in ('name','dataType','allowedValueRange','allowedValueList','defaultValue')])
+        name = attr['name'].text.strip()
+        state_vars[name] = {
+            'dataType':attr['dataType'].text.strip(),
+            }
+        if attr['defaultValue'] is not None:
+            state_vars['default'] = attr['defaultValue'].text.strip()
+        if attr['allowedValueRange'] is not None:
+            state_vars[name]['range'] = dict([(item.tag,item.text) for item in attr['allowedValueRange']])
+        if attr['allowedValueList'] is not None:
+            state_vars[name]['list'] = [item.text.strip() for item in attr['allowedValueList']]    
     service_name = service_desc['serviceId'].split(':')[3] 
     klaus = type(service_name,(ServiceBase,),{'__doc__':'tests'})
     for action in root.find('actionList'):
@@ -126,7 +148,7 @@ def get_service(url,service_desc):
         setattr(klaus,func.__name__,func)
     return klaus(urlparse.urljoin(url,service_desc['controlURL']),
                  urlparse.urljoin(url,service_desc['eventSubURL']),
-                 service_desc)
+                 service_desc,state_vars)
 
         
 class Device:
