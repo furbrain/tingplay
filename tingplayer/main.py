@@ -8,6 +8,7 @@ import playlist
 import current
 import upnp.search
 import upnp.device
+import upnp.events
 
 tingbot.screen.fill("black")
 
@@ -30,10 +31,11 @@ def device_found(dev):
     if hasattr(device,'RenderingControl'):
         current_panel.add_renderer(device)
 
-server = upnp.search.threaded_device_discovery(device_found)
-
+device_server = upnp.search.threaded_device_discovery(device_found)
+event_server = upnp.events.init_events()
 try:
     tingbot.run()
 finally:
     print "closing server"
-    server.shutdown()
+    device_server.shutdown()
+    event_server.shutdown()

@@ -17,9 +17,14 @@ class UPnPHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def do_NOTIFY(self):
         global subscriptions
         sid = self.headers['sid']
+        if "content-length" in self.headers:
+            data = self.rfile.read(int(self.headers.getheader('Content-Length')))
+        else:
+            data = self.rfile.read()
         if sid in subscriptions:
-            subscriptions[sid](self.rfile.read())
+            subscriptions[sid][0](data)
         self.send_response(200)
+        self.end_headers()
 
     def log_message(self, format, *args):
         return
@@ -54,9 +59,17 @@ def subscribe(service,callback):
                            'TIMEOUT':'Second-60'})
     response = urllib2.urlopen(req)
     sid = response.info()['SID']
-    subscriptions[sid] = callback
-    print response.info()
-    
+    subscriptions[sid] = (callback,service)
+
+def unsubscribe(callback):
+    global subscriptions
+    for sid,cb in subscriptions.items():
+        if cb[0]==callback:
+            req = UnsubscribeRequest(cb[1]._eventURL,'',
+                                     {'SID':sid})
+            response = urllib2.urlopen(req)
+            del subscriptions[sid]
+            
 def init_events():
     """initialise http server to receive events"""
     server = ThreadedUPnPServer(('',8123),UPnPHandler)
