@@ -8,6 +8,7 @@ class PlaylistPanel(gui.ScrollArea):
         self.current_panel = current_panel
         self.playlist = [] # a list of upnp items
         self.current_track = 0
+        self.current_panel.set_playlist(self)
         
     def play_tracks(self,tracks):
         self.current_track = 0
@@ -41,3 +42,17 @@ class PlaylistPanel(gui.ScrollArea):
                 but.style = current_playing_style
         self.update(downwards=True)
         
+    def next_track(self):
+        self.current_track += 1
+        if self.current_track>=len(self.playlist):
+            self.current_track = 0
+        else:
+            self.click_track(self.current_track)
+    
+    def previous_track(self):
+        self.current_track -= 1
+        if self.current_track<0:
+            self.current_track = 0
+        else:
+            self.click_track(self.current_track)
+    
