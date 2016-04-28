@@ -20,9 +20,9 @@ class LibraryPanel(gui.Panel):
         self.library = None
         self.playlist_panel=playlist_panel
         
-    def browse(self,ObjectID="0"):
+    def browse(self,**kwargs):
         try:
-            results = self.library.ContentDirectory.Browse(ObjectID=ObjectID)
+            results = self.library.ContentDirectory.Browse(**kwargs)
         except urllib2.HTTPError:
             if len(self.library.friendlyName)>10:
                 name = self.library.friendlyName[:10]+'...'
@@ -36,12 +36,20 @@ class LibraryPanel(gui.Panel):
     def library_selected(self,name,library):
         if library:
             self.library=library
+            self.browse_list = ["0"]
             results = self.browse()
             if results:
                 self.show_browse_results(results)
+                
+    def click_parent(self):
+        self.browse_list.pop()
+        results = self.browse(ObjectID=self.browse_list[-1])
+        if results:
+            self.show_browse_results(results)
         
     def click_container(self,container):
         obj_id = container.attrib['id']
+        self.browse_list.append(obj_id)
         results = self.browse(ObjectID=obj_id)
         if results:
             self.show_browse_results(results)
@@ -52,7 +60,7 @@ class LibraryPanel(gui.Panel):
             ("Enqueue",lambda: self.playlist_panel.enqueue_tracks([item]))])
         
     def get_container_tracks(self,container):
-        results = self.browse(container.attrib['id'])
+        results = self.browse(ObjectID=container.attrib['id'])
         results = upnp.device.parseXML(results['Result'])
         items = results.findall("item")
         return items
@@ -70,8 +78,18 @@ class LibraryPanel(gui.Panel):
         containers = results.findall("container")
         items = results.findall("item")
         self.entries.scrolled_area.remove_all()
-        self.entries.resize_canvas((300,3+30*(len(containers)+len(items))))
+        item_count = len(containers)+len(items)
+        if len(self.browse_list)>1:
+            item_count += 1
+        self.entries.resize_canvas((300,3+30*item_count))
         index = 0
+        if len(self.browse_list)>1:
+            gui.PopupButton((0,30*index), (300,30), align="topleft",
+                            parent=self.entries.scrolled_area,
+                            style=dir_style,
+                            label=u'\u00ab--',
+                            callback = self.click_parent)    
+            index += 1        
         for c in containers:
             gui.PopupButton((0,30*index), (300,30), align="topleft",
                             parent=self.entries.scrolled_area,
