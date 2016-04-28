@@ -69,7 +69,7 @@ class CurrentPanel(gui.Panel):
         
         library_label = gui.StaticText((0,0),(60,30),align="topleft",parent=self, label = "Player:",text_align="right")
         self.volume_slider = gui.Slider((right,32),(20,bottom-72),align="topright",
-                                        parent=self,callback=self.volume_cb)
+                                        parent=self,callback=self.volume_cb, release_callback = self.final_volume_cb)
         self.volume_label = gui.StaticText(self.volume_slider.rect.bottomright,(50,20),align="topright",label="Vol: --",parent=self)
         self.position_label = gui.StaticText((0,MAIN_PANEL.height),(50,20),align="bottomleft",label="--:--",parent=self)
         self.position_slider = gui.Slider(self.position_label.rect.topright,(right-100,20),align="topleft",parent=self)
@@ -95,6 +95,7 @@ class CurrentPanel(gui.Panel):
         
     def set_renderer(self,name,renderer):
         print "Selecting renderer: " + name
+        if renderer is None: return
         self.renderer = renderer
         if self.change_monitor:
             self.change_monitor.unsubscribe()
@@ -133,12 +134,12 @@ class CurrentPanel(gui.Panel):
         self.position_label.update()
         
     def volume_cb(self,value):
-        tm = pygame.time.get_ticks()
-        if tm>self.last_action_time+200:
-            self.last_action_time = tm
-            print "changing volume: ",value
-            self.volume_label.label = "Vol: %s" % value
-            self.renderer.RenderingControl.SetVolume(DesiredVolume=int(value))
+        self.volume_label.label = "Vol: %d" % int(value)
+        self.volume_label.update()
+            
+    def final_volume_cb(self,value):
+        self.renderer.RenderingControl.SetVolume(DesiredVolume=int(value))
+    
         
     def play(self,track = None):
         if track is not None:
@@ -167,10 +168,10 @@ class CurrentPanel(gui.Panel):
                     
     def transport_state_changed(self,value):
         if value=="STOPPED":
-            if self.change_monitor:
+            if self.change_monitor and hasattr(self.change_monitor,'RelTime'):
                 rt = hms_to_seconds(self.change_monitor.RelTime)
                 td = hms_to_seconds(self.change_monitor.TrackDuration)
-                if abs(rt-td)<3:
+                if abs(td-rt)<3:
                     print "next track"
                     self.playlist.next_track()                   
         
