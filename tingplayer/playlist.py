@@ -37,7 +37,7 @@ class PlaylistPanel(gui.ScrollArea):
                                     parent=self.scrolled_area,
                                     style=self.style,
                                     label=track.find('title').text,
-                                    callback = partial(self.click_track,track))
+                                    callback = partial(self.click_track,i))
             if i==self.current_track:
                 but.style = current_playing_style
         self.update(downwards=True)
