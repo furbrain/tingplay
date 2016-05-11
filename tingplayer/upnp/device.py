@@ -58,7 +58,6 @@ class ServiceBase(object):
         try:
             response = urllib2.urlopen(req)
         except urllib2.HTTPError as err:
-            print err.code
             if err.code==500:
                 response = parseXML(err.read())
                 code = response.find('.//errorCode').text
