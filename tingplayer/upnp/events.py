@@ -60,6 +60,21 @@ def subscribe(service,callback):
     response = urllib2.urlopen(req)
     sid = response.info()['SID']
     subscriptions[sid] = (callback,service)
+    schedule_resubscribe(service,sid,response.info()['TIMEOUT'])
+
+def schedule_resubscribe(service,sid,timeout):
+    time_due = int(timeout.split('-')[1])
+    time_due = time_due * 4 / 5
+    threading.Timer(time_due,resubscribe,[service,sid]).start()
+
+def resubscribe(service,sid):
+    if sid in subscriptions:
+        req = SubscribeRequest(service._eventURL,'',
+                              {'TIMEOUT':'Second-60',
+                               'SID':sid})
+        response = urllib2.urlopen(req)
+        schedule_resubscribe(service,sid,response.info()['TIMEOUT'])
+    
 
 def unsubscribe(callback):
     global subscriptions
