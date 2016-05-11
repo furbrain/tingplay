@@ -113,7 +113,6 @@ class CurrentPanel(gui.Panel):
         self.next_button.callback = self.playlist.next_track
         
     def set_volume(self,value):
-        print "volume response: " + value    
         self.volume_slider.value = int(value)
         self.volume_label.label = "Vol: %s" % value
         self.volume_slider.update()
@@ -153,10 +152,17 @@ class CurrentPanel(gui.Panel):
                     print "prepare for connection exists. Damn"
                 meta_data = ET.tostring(self.track.find('res'),encoding='utf-8')
                 track_url = self.track.find('res').text
-                self.renderer.AVTransport.SetAVTransportURI(InstanceID=InstanceID,
-                                                            CurrentURI=track_url,
-                                                            CurrentURIMetaData=meta_data)
-                self.renderer.AVTransport.Play(InstanceID=InstanceID)
+                try:
+                    if self.change_monitor.TransportState=="PLAYING":
+                        self.renderer.AVTransport.Stop()
+                    self.renderer.AVTransport.SetAVTransportURI(InstanceID=InstanceID,
+                                                                CurrentURI=track_url,
+                                                                CurrentURIMetaData=meta_data)
+                    self.renderer.AVTransport.Play(InstanceID=InstanceID)
+                except upnp.device.UPnPError as e:
+                    print "communications error while changing track"
+                    print e
+                    gui.MessageBox(message = "Communications Error: %d" %e.code)
             self.update(downwards=True)
             
     def add_renderer(self,renderer):
