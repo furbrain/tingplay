@@ -1,12 +1,13 @@
 import xml.etree.ElementTree as ET
 
 import pygame.time
+import pygame.transform
 
 import tingbot_gui as gui
 from layout import MAIN_PANEL
 import upnp.events
 import upnp.device
-from tingbot import every, main_run_loop
+from tingbot import every, main_run_loop, Image
 
 def hms_to_seconds(value):
     secs = 0
@@ -58,6 +59,37 @@ class ChangeMonitor(object):
         upnp.events.unsubscribe(self.notify)
         main_run_loop.remove_timer(self.get_play_position)
         
+class AlbumButton(gui.Button):
+    def __init__(self, xy, size, align="center", parent=None, art_url = None):
+        super(AlbumButton, self).__init__(xy, size, align, parent)
+        self.set_art(art_url)
+        
+    def set_art(self,art_url):
+        if art_url:
+            self.art  = Image.load_url(art_url)
+            self.thumb = Image(pygame.transform.scale(self.art.surface,self.size))
+        else:
+            self.art = None
+        
+    def draw(self):
+        if self.art:
+            self.image(self.thumb)
+        else:
+            self.fill(self.style.bg_color)
+            
+    def on_click(self):
+        if self.art:
+            AlbumArtViewer(self.art)
+
+class AlbumArtViewer(gui.ModalWindow):
+    def __init__(self,art):
+        super(AlbumArtViewer,self).__init__((160,120),art.size)
+        self.art = art
+        self.image(art)
+        
+    def draw(self):
+        self.image(self.art)            
+        
 class CurrentPanel(gui.Panel):
     def __init__(self):
         right,bottom = MAIN_PANEL.size
@@ -88,6 +120,7 @@ class CurrentPanel(gui.Panel):
                                      label="Album Title",text_align='left')
         self.artist = gui.StaticText((3,96),(MAIN_PANEL.width-102,30),align="topleft",parent=self,
                                      label="Artist",text_align='left')
+        self.album_art = AlbumButton(self.volume_slider.rect.topleft,(80,80),align="topright",parent=self,art_url=None  )
         self.renderer = None
         self.change_monitor = None
         self.last_action_time = 0
@@ -146,6 +179,11 @@ class CurrentPanel(gui.Panel):
             self.title.label = track.find('title').text
             self.artist.label = track.find('artist').text
             self.album.label = track.find('album').text
+            if track.find('albumArtURI') is not None:
+                print track.find('albumArtURI').text
+                self.album_art.set_art(track.find('albumArtURI').text)
+            else:
+                self.album_art.set_art(None)
             if self.renderer:
                 InstanceID = 0
                 if hasattr(self.renderer.ConnectionManager,'PrepareForConnection'):
