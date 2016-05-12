@@ -202,7 +202,12 @@ class CurrentPanel(gui.Panel):
                     print e
                     gui.MessageBox(message = "Communications Error: %d" %e.code)
             self.update(downwards=True)
-            
+    
+    def stop(self):
+        if self.change_monitor.TransportState=="PLAYING":
+            self.renderer.AVTransport.Stop()
+        
+           
     def add_renderer(self,renderer):
         if self.renderer_dropdown.values == [(" -- ",None)]:
             self.renderer_dropdown.values[:] = []

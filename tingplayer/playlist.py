@@ -22,6 +22,22 @@ class PlaylistPanel(gui.ScrollArea):
         self.current_panel.play(self.playlist[index])
         self.refresh_list()
         
+    def delete_track(self,index):
+        if self.current_track==index:
+            self.current_panel.stop()
+        del self.playlist[index]
+        self.refresh_list()
+        
+    def delete_all_tracks(self):
+        self.current_panel.stop()
+        self.playlist[:] = []
+        self.refresh_list()
+    
+    def long_click_track(self,track):
+        gui.PopupMenu(xy = (100,60), menu_items = [
+            ("Delete",lambda: self.delete_track(track)),
+            ("Delete All",self.delete_all_tracks)])
+        
     def enqueue_tracks(self,tracks):
         self.playlist.extend(tracks)
         self.refresh_list()
@@ -29,7 +45,7 @@ class PlaylistPanel(gui.ScrollArea):
     def refresh_list(self):
         height = 30*len(self.playlist)
         self.scrolled_area.remove_all()
-        self.resize_canvas((300,height))
+        self.resize_canvas((300,height or 1))
         current_playing_style = self.style.copy()
         current_playing_style.popup_bg_color = self.style.button_pressed_color
         for i,track in enumerate(self.playlist):
@@ -37,7 +53,8 @@ class PlaylistPanel(gui.ScrollArea):
                                     parent=self.scrolled_area,
                                     style=self.style,
                                     label=track.find('title').text,
-                                    callback = partial(self.click_track,i))
+                                    callback = partial(self.click_track,i),
+                                    long_click_callback = partial(self.long_click_track,i))
             if i==self.current_track:
                 but.style = current_playing_style
         self.update(downwards=True)
