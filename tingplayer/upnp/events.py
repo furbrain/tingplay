@@ -65,10 +65,12 @@ def subscribe(service,callback):
 def schedule_resubscribe(service,sid,timeout):
     time_due = int(timeout.split('-')[1])
     time_due = time_due * 4 / 5
-    threading.Timer(time_due,resubscribe,[service,sid]).start()
+    timer = threading.Timer(time_due,resubscribe,[service,sid])
+    timer.daemon = True
+    timer.start()
 
 def resubscribe(service,sid):
-    if sid in subscriptions:
+    if subscriptions and sid in subscriptions:
         req = SubscribeRequest(service._eventURL,'',
                               {'TIMEOUT':'Second-60',
                                'SID':sid})
