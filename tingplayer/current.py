@@ -79,9 +79,9 @@ class AlbumButton(gui.Button):
             
     def on_click(self):
         if self.art:
-            AlbumArtViewer(self.art)
+            AlbumArtViewer(self.art).run()
 
-class AlbumArtViewer(gui.ModalWindow):
+class AlbumArtViewer(gui.Dialog):
     def __init__(self,art):
         super(AlbumArtViewer,self).__init__((160,120),art.size)
         self.art = art
