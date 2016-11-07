@@ -18,7 +18,7 @@ class PlaylistPanel(gui.ScrollArea):
         
     def click_track(self,index):
         self.current_track = index
-        print "Playing " + self.playlist[index].find('title').text
+        print "Playing " + self.playlist[index]['title']
         self.current_panel.play(self.playlist[index])
         self.refresh_list()
         
@@ -52,7 +52,7 @@ class PlaylistPanel(gui.ScrollArea):
             but = gui.PopupButton((0,30*i), (300,30), align="topleft",
                                     parent=self.scrolled_area,
                                     style=self.style,
-                                    label=track.find('title').text,
+                                    label=track['title'],
                                     callback = partial(self.click_track,i),
                                     long_click_callback = partial(self.long_click_track,i))
             if i==self.current_track:
