@@ -1,13 +1,11 @@
-import xml.etree.ElementTree as ET
-
 import pygame.time
 import pygame.transform
 
 import tingbot_gui as gui
-from layout import MAIN_PANEL
-import upnp.events
-import upnp.device
 from tingbot import every, main_run_loop, Image
+
+from layout import MAIN_PANEL
+import utils
 
 def hms_to_seconds(value):
     secs = 0
@@ -24,40 +22,6 @@ def seconds_to_ms(value):
     value = int(value)
     return ("%d:%02d" % divmod(value,60))
     
-
-class ChangeMonitor(object):
-    """This class represents the state of the renderer"""
-    
-    def __init__(self,renderer,**kwargs):
-        """pass a keyword and a callback - the callback will be called if the keyword value changes"""
-        self.renderer = renderer
-        self._callbacks = {}
-        self._callbacks.update(kwargs)
-        upnp.events.subscribe(renderer.AVTransport,self.notify)
-        upnp.events.subscribe(renderer.RenderingControl,self.notify)
-        every(seconds=1)(self.get_play_position)
-        
-        
-    def set_attribute(self,attribute,value):    
-        setattr(self,attribute,value)
-        if attribute in self._callbacks:
-            self._callbacks[attribute](value)
-        
-    def notify(self,changes):
-        changes = upnp.device.parseXML(changes)
-        changes = upnp.device.parseXML(changes.find('.//LastChange').text)
-        instance = changes.find('InstanceID')
-        for elem in instance:
-            self.set_attribute(elem.tag,elem.get('val'))
-        
-    def get_play_position(self):
-        pos = self.renderer.AVTransport.GetPositionInfo()
-        for key,value in pos.items():
-            self.set_attribute(key,value)
-        
-    def unsubscribe(self):
-        upnp.events.unsubscribe(self.notify)
-        main_run_loop.remove_timer(self.get_play_position)
         
 class AlbumButton(gui.Button):
     def __init__(self, xy, size, align="center", parent=None, art_url = None):
@@ -122,22 +86,28 @@ class CurrentPanel(gui.Panel):
                                      label="Artist",text_align='left')
         self.album_art = AlbumButton(self.volume_slider.rect.topleft,(80,80),align="topright",parent=self,art_url=None  )
         self.renderer = None
-        self.change_monitor = None
         self.last_action_time = 0
         self.playlist = None
+        self.transport_state = None
         
     def set_renderer(self,name,renderer):
         print "Selecting renderer: " + name
         if renderer is None: return
+        if self.renderer:
+            #unsubscribe previous subs
+            utils.disconnect_variable(self.renderer.av_transport, 'RelTime', self.set_track_pos)
+            utils.disconnect_variable(self.renderer.av_transport, 'TrackDuration', self.set_duration)
+            utils.disconnect_variable(self.renderer.av_transport, 'TransportState', self.transport_state_changed)
+            utils.disconnect_variable(self.renderer.rendering_control, 'Volume', self.set_volume)
+            
         self.renderer = renderer
-        if self.change_monitor:
-            self.change_monitor.unsubscribe()
-        self.volume_slider.max_val = int(self.renderer.RenderingControl.vars['Volume']['range']['maximum'])
-        self.change_monitor = ChangeMonitor(self.renderer,
-                                            Volume=self.set_volume,
-                                            TrackDuration=self.set_duration,
-                                            RelTime=self.set_track_pos,
-                                            TransportState=self.transport_state_changed)
+        utils.connect_variable(self.renderer.av_transport, 'RelTime', self.set_track_pos)
+        utils.connect_variable(self.renderer.av_transport, 'TrackDuration', self.set_duration)
+        utils.connect_variable(self.renderer.av_transport, 'TransportState', self.transport_state_changed)
+        utils.connect_variable(self.renderer.rendering_control, 'Volume', self.set_volume)
+        volume_variable = self.renderer.rendering_control.service.get_state_variable('Volume')
+        
+        self.volume_slider.max_val = volume_variable.allowed_value_range['maximum']
         self.volume_slider.update()
         
     def set_playlist(self,playlist):
@@ -170,56 +140,61 @@ class CurrentPanel(gui.Panel):
         self.volume_label.update()
             
     def final_volume_cb(self,value):
-        self.renderer.RenderingControl.SetVolume(DesiredVolume=int(value))
+        self.renderer.rendering_control.set_volume(desired_volume=int(value))
     
         
     def play(self,track = None):
+        print type(track)
         if track is not None:
             self.track = track
-            self.title.label = track.find('title').text
-            self.artist.label = track.find('artist').text
-            self.album.label = track.find('album').text
-            if track.find('albumArtURI') is not None:
-                print track.find('albumArtURI').text
-                self.album_art.set_art(track.find('albumArtURI').text)
+            self.title.label = track['title']
+            self.artist.label = track['artist']
+            self.album.label = track['album']
+            if 'albumArtURI' in track is not None:
+                self.album_art.set_art(track['albumArtURI'])
             else:
                 self.album_art.set_art(None)
             if self.renderer:
                 InstanceID = 0
-                if hasattr(self.renderer.ConnectionManager,'PrepareForConnection'):
+                if self.renderer.connection_manager.service.get_action('PrepareForConnection'):
                     print "prepare for connection exists. Damn"
-                meta_data = ET.tostring(self.track.find('res'),encoding='utf-8')
-                track_url = self.track.find('res').text
-                try:
-                    if self.change_monitor.TransportState=="PLAYING":
-                        self.renderer.AVTransport.Stop()
-                    self.renderer.AVTransport.SetAVTransportURI(InstanceID=InstanceID,
-                                                                CurrentURI=track_url,
-                                                                CurrentURIMetaData=meta_data)
-                    self.renderer.AVTransport.Play(InstanceID=InstanceID)
-                except upnp.device.UPnPError as e:
-                    print "communications error while changing track"
-                    print e
-                    gui.MessageBox(message = "Communications Error: %d" %e.code)
+                meta_data = track['res'][0].toString()
+                track_url = track['res'][0].data
+                if self.transport_state=="PLAYING":
+                    dfr = self.renderer.av_transport.stop()
+                    dfr.add_callback(self.renderer.av_transport.set_av_transport_uri,
+                                     instance_id=InstanceID,
+                                     current_uri=track_url,
+                                     current_uri_metadata=meta_data)
+                else:
+                    dfr = self.renderer.av_transport.set_av_transport_uri(
+                                     instance_id=InstanceID,
+                                     current_uri=track_url,
+                                     current_uri_metadata=meta_data)
+                dfr.add_callback(self.renderer.av_transport.play, instance_id=InstanceID)
+                dfr.add_errback(utils.errback)
             self.update(downwards=True)
     
     def stop(self):
-        if self.change_monitor.TransportState=="PLAYING":
-            self.renderer.AVTransport.Stop()
+        if self.transport_state=="PLAYING":
+            self.renderer.av_transport.stop()
         
            
-    def add_renderer(self,renderer):
+    def add_renderer(self,client, udn):
         if self.renderer_dropdown.values == [(" -- ",None)]:
             self.renderer_dropdown.values[:] = []
             self.renderer_dropdown.selected = ("Select Player",None)
-        self.renderer_dropdown.values.append((renderer.friendlyName,renderer))
+        self.renderer_dropdown.values.append((client.device.friendly_name,client))
         self.renderer_dropdown.update()
                     
     def transport_state_changed(self,value):
+        self.transport_state = value
         if value=="STOPPED":
-            if self.change_monitor and hasattr(self.change_monitor,'RelTime'):
-                rt = hms_to_seconds(self.change_monitor.RelTime)
-                td = hms_to_seconds(self.change_monitor.TrackDuration)
+            rt = self.renderer.av_transport.get_state_variable('RelTime')
+            td = self.renderer.av_transport.get_state_variable('TrackDuration')
+            if rt and td:
+                rt = hms_to_seconds(rt.value)
+                td = hms_to_seconds(td.value)
                 if abs(td-rt)<3:
                     print "next track"
                     self.playlist.next_track()                   
