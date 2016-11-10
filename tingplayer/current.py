@@ -1,8 +1,7 @@
-import pygame.time
 import pygame.transform
 
 import tingbot_gui as gui
-from tingbot import every, main_run_loop, Image
+from tingbot import Image
 
 from layout import MAIN_PANEL
 import utils
@@ -22,7 +21,13 @@ def seconds_to_ms(value):
     value = int(value)
     return ("%d:%02d" % divmod(value,60))
     
-        
+def get_url_metadata(track):
+    resources = track['resources']
+    for prefix in ['http','ftp','rtsp','']:
+        for x,y in resources.items():
+            if x.startswith(prefix):
+                return x, y
+    
 class AlbumButton(gui.Button):
     def __init__(self, xy, size, align="center", parent=None, art_url = None):
         super(AlbumButton, self).__init__(xy, size, align, parent)
@@ -89,25 +94,27 @@ class CurrentPanel(gui.Panel):
         self.last_action_time = 0
         self.playlist = None
         self.transport_state = None
-        
+        self.play_timer = None
+                
     def set_renderer(self,name,renderer):
         print "Selecting renderer: " + name
+        if renderer==self.renderer: return
+        self.stop_timer()
         if renderer is None: return
         if self.renderer:
             #unsubscribe previous subs
-            utils.disconnect_variable(self.renderer.av_transport, 'RelTime', self.set_track_pos)
-            utils.disconnect_variable(self.renderer.av_transport, 'TrackDuration', self.set_duration)
+            utils.disconnect_variable(self.renderer.av_transport, 'RelativeTimePosition', self.set_track_pos)
+            utils.disconnect_variable(self.renderer.av_transport, 'CurrentTrackDuration', self.set_duration)
             utils.disconnect_variable(self.renderer.av_transport, 'TransportState', self.transport_state_changed)
             utils.disconnect_variable(self.renderer.rendering_control, 'Volume', self.set_volume)
-            
+
         self.renderer = renderer
-        utils.connect_variable(self.renderer.av_transport, 'RelTime', self.set_track_pos)
-        utils.connect_variable(self.renderer.av_transport, 'TrackDuration', self.set_duration)
+        utils.connect_variable(self.renderer.av_transport, 'RelativeTimePosition', self.set_track_pos)
+        utils.connect_variable(self.renderer.av_transport, 'CurrentTrackDuration', self.set_duration)
         utils.connect_variable(self.renderer.av_transport, 'TransportState', self.transport_state_changed)
         utils.connect_variable(self.renderer.rendering_control, 'Volume', self.set_volume)
         volume_variable = self.renderer.rendering_control.service.get_state_variable('Volume')
-        
-        self.volume_slider.max_val = volume_variable.allowed_value_range['maximum']
+        self.volume_slider.max_val = int(volume_variable.allowed_value_range['maximum'])
         self.volume_slider.update()
         
     def set_playlist(self,playlist):
@@ -115,21 +122,27 @@ class CurrentPanel(gui.Panel):
         self.prev_button.callback = self.playlist.previous_track
         self.next_button.callback = self.playlist.next_track
         
-    def set_volume(self,value):
+    def set_volume(self,variable):
+        value = variable.value
         self.volume_slider.value = int(value)
         self.volume_label.label = "Vol: %s" % value
         self.volume_slider.update()
         self.volume_label.update()
     
-    def set_duration(self,value):
+    def set_duration(self,variable):
+        value = variable.value
         secs = hms_to_seconds(value)
         if secs:
             self.position_slider.max_val = secs
             self.duration_label.label = seconds_to_ms(secs)
             self.duration_label.update()
 
-    def set_track_pos(self,value):        
-        secs = hms_to_seconds(value)
+    def set_track_pos(self,variable):
+        value = variable.value
+        try:
+            secs = hms_to_seconds(value)
+        except ValueError:
+            return
         self.position_slider.value = secs
         self.position_slider.update()
         self.position_label.label = seconds_to_ms(secs)
@@ -141,10 +154,17 @@ class CurrentPanel(gui.Panel):
             
     def final_volume_cb(self,value):
         self.renderer.rendering_control.set_volume(desired_volume=int(value))
-    
         
+    def start_position_timer(self):
+        if not self.play_timer:
+            self.play_timer = self.create_timer(self.renderer.av_transport.get_position_info,1)
+    
+    def stop_timer(self):
+        if self.play_timer:
+            self.play_timer.stop()
+            self.play_timer = None
+
     def play(self,track = None):
-        print type(track)
         if track is not None:
             self.track = track
             self.title.label = track['title']
@@ -158,24 +178,28 @@ class CurrentPanel(gui.Panel):
                 InstanceID = 0
                 if self.renderer.connection_manager.service.get_action('PrepareForConnection'):
                     print "prepare for connection exists. Damn"
-                meta_data = track['res'][0].toString()
-                track_url = track['res'][0].data
+                track_url, meta_data = (get_url_metadata(track))
                 if self.transport_state=="PLAYING":
                     dfr = self.renderer.av_transport.stop()
-                    dfr.add_callback(self.renderer.av_transport.set_av_transport_uri,
-                                     instance_id=InstanceID,
-                                     current_uri=track_url,
-                                     current_uri_metadata=meta_data)
+                    dfr.addCallback(utils.callback_wrapper(
+                                    self.renderer.av_transport.set_av_transport_uri,
+                                    instance_id=InstanceID,
+                                    current_uri=track_url,
+                                    current_uri_metadata=meta_data))
                 else:
                     dfr = self.renderer.av_transport.set_av_transport_uri(
-                                     instance_id=InstanceID,
-                                     current_uri=track_url,
-                                     current_uri_metadata=meta_data)
-                dfr.add_callback(self.renderer.av_transport.play, instance_id=InstanceID)
-                dfr.add_errback(utils.errback)
+                                    instance_id=InstanceID,
+                                    current_uri=track_url,
+                                    current_uri_metadata=meta_data)
+                dfr.addCallback(utils.callback_wrapper(
+                                self.renderer.av_transport.play, 
+                                instance_id=InstanceID))
+                dfr.addErrback(utils.errback)
+                self.start_position_timer()
             self.update(downwards=True)
     
     def stop(self):
+        self.stop_timer()
         if self.transport_state=="PLAYING":
             self.renderer.av_transport.stop()
         
@@ -187,12 +211,12 @@ class CurrentPanel(gui.Panel):
         self.renderer_dropdown.values.append((client.device.friendly_name,client))
         self.renderer_dropdown.update()
                     
-    def transport_state_changed(self,value):
-        self.transport_state = value
-        if value=="STOPPED":
-            rt = self.renderer.av_transport.get_state_variable('RelTime')
-            td = self.renderer.av_transport.get_state_variable('TrackDuration')
-            if rt and td:
+    def transport_state_changed(self, variable):
+        self.transport_state = variable.value
+        if variable.value=="STOPPED":
+            rt = self.renderer.av_transport.service.get_state_variable('RelativeTimePosition')
+            td = self.renderer.av_transport.service.get_state_variable('CurrentTrackDuration')
+            if rt and td and rt.value and td.value:
                 rt = hms_to_seconds(rt.value)
                 td = hms_to_seconds(td.value)
                 if abs(td-rt)<3:

@@ -55,7 +55,7 @@ class LibraryPanel(gui.Panel):
         d = self.browse(self.show_long_click_popup, object_id=container['id'])
             
     def show_long_click_popup(self,tracks):
-        tracks = tracks['items'].values()
+        tracks = sorted(tracks['items'].values(), key=sort_items)
         gui.PopupMenu(xy = (100,60), menu_items = [
             ("Play All",lambda: self.playlist_panel.play_tracks(tracks)),
             ("Enqueue All",lambda: self.playlist_panel.enqueue_tracks(tracks))])

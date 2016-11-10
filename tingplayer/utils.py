@@ -1,17 +1,21 @@
-import tingbot_gui
+import tingbot_gui as gui
 import coherence.extern.louie as louie
 
 def printer(result):
     print result
+    
+def callback_wrapper(func,*args,**kwargs):
+    return lambda result: func(*args, **kwargs)
 
 def errback(err):
-    gui.message_box(message=err.getErrorMessage())
+    err_msg = err.getErrorMessage()
+    print err_msg
+    gui.message_box(message=err_msg)
     
 def connect_variable(service, var_name, callback):
-    func = lambda variable: callback(variable.value)
-    service.subscribe_for_variable(var_name, callback=func, signal=True)
+    service.service.subscribe_for_variable(var_name, callback=callback, signal=True)
 
 def disconnect_variable(service, var_name, callback):
     signal = 'Coherence.UPnP.StateVariable.%s.changed' % var_name
-    louie.disconnect(service, signal, callback)
+    louie.disconnect(callback, signal, service.service)
     
