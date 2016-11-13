@@ -33,7 +33,9 @@ gui.get_root_widget().update(downwards=True)
 
 #set up twisted
 def setUp():
-    control_point = ControlPoint(Coherence({'logmode':'warning'}),
+    coherence_config = {'logmode':'warning',
+                        'plugins':{'GStreamerPlayer': {'name':'Tingbot'}}}
+    control_point = ControlPoint(Coherence(coherence_config),
                                  auto_client=['MediaRenderer', 'MediaServer'])
     control_point.connect(lib_panel.add_library, 'Coherence.UPnP.ControlPoint.MediaServer.detected')
     control_point.connect(current_panel.add_renderer, 'Coherence.UPnP.ControlPoint.MediaRenderer.detected')

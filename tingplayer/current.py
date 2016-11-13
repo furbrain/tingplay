@@ -1,3 +1,4 @@
+from twisted.internet import defer
 import pygame.transform
 
 import tingbot_gui as gui
@@ -164,6 +165,7 @@ class CurrentPanel(gui.Panel):
             self.play_timer.stop()
             self.play_timer = None
 
+    @defer.inlineCallbacks
     def play(self,track = None):
         if track is not None:
             self.track = track
@@ -179,22 +181,16 @@ class CurrentPanel(gui.Panel):
                 if self.renderer.connection_manager.service.get_action('PrepareForConnection'):
                     print "prepare for connection exists. Damn"
                 track_url, meta_data = (get_url_metadata(track))
-                if self.transport_state=="PLAYING":
-                    dfr = self.renderer.av_transport.stop()
-                    dfr.addCallback(utils.callback_wrapper(
-                                    self.renderer.av_transport.set_av_transport_uri,
-                                    instance_id=InstanceID,
-                                    current_uri=track_url,
-                                    current_uri_metadata=meta_data))
-                else:
-                    dfr = self.renderer.av_transport.set_av_transport_uri(
-                                    instance_id=InstanceID,
-                                    current_uri=track_url,
-                                    current_uri_metadata=meta_data)
-                dfr.addCallback(utils.callback_wrapper(
-                                self.renderer.av_transport.play, 
-                                instance_id=InstanceID))
-                dfr.addErrback(utils.errback)
+                try:
+                    if self.transport_state=="PLAYING":
+                        yield self.renderer.av_transport.stop()
+                    yield self.renderer.av_transport.set_av_transport_uri(
+                                        instance_id=InstanceID,
+                                        current_uri=track_url,
+                                        current_uri_metadata=meta_data)
+                    yield self.renderer.av_transport.play(instance_id=InstanceID)
+                except Exception as err:
+                    gui.message_box(message=err)
                 self.start_position_timer()
             self.update(downwards=True)
     
