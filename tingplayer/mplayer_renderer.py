@@ -24,23 +24,64 @@ from coherence.extern.simple_plugin import Plugin
 
 from coherence import log
 
+
+def format_time(time):
+    fmt = '%d:%02d:%02.2f'
+    try:
+        m, s = divmod(time, 60)
+        h, m = divmod(m, 60)
+    except:
+        h = m = s = 0
+        fmt = '%02d:%02d:%02.2f'
+    formatted = fmt % (h, m, s)
+    return formatted
+
+
 class MPlayerError(Exception):
     pass
     
-class MPlayerProtocol(protocol.ProcessProtocol, LineOnlyReceiver):
+class MPlayerProtocol(protocol.ProcessProtocol, LineOnlyReceiver, log.Loggable):
     def __init__(self):
-        self._callback_queue = Queue.Queue()
+        self.send_queue = Queue.Queue(10)
+        self.current_callback = None
 
     def outReceived(self, data):
         self.dataReceived(data)
 
     def lineReceived(self, line):
-        try:
-            deferred = self._callback_queue.get_nowait()
-        except Queue.Empty:
-            return
-        deferred.callback(line)
-        self._callback_queue.task_done()
+        if line.startswith("   GLOBAL: ANS_"):
+            line = line[10:]
+            self.warn('LINE: ' + line)
+            if self.current_callback:
+                self.current_callback.callback(line)
+                self.send_queue.task_done()
+                self.current_callback = None
+                if not self.send_queue.empty():
+                    self.do_commands()
+        
+    def handle_timeout(self, value, timeout):
+        self.info("Timeout occurred: %s" % repr(timeout))
+        if self.current_callback:
+            self.current_callback = None
+            self.send_queue.task_done()
+            reactor.callLater(0,self.do_commands)
+        if isinstance(value, failure.Failure):
+            value.trap(defer.CancelledError)
+            raise defer.TimeoutError(timeout, "Deferred")
+               
+    def do_commands(self):
+        if not self.current_callback:
+            try:
+                cmd, self.current_callback = self.send_queue.get_nowait()
+                self.debug("Command called: " + cmd)
+                self.transport.write(cmd)
+                if self.current_callback is None:
+                    self.send_queue.task_done()
+                else:
+                    self.current_callback.addTimeout(0.5,reactor,self.handle_timeout)
+                reactor.callLater(0.1,self.do_commands)
+            except Queue.Empty:
+                pass                  
         
     def receive_echo(self, line, expected):
         if line != expected:
@@ -50,21 +91,21 @@ class MPlayerProtocol(protocol.ProcessProtocol, LineOnlyReceiver):
         d = defer.Deferred()
         self._callback_queue.put(d)
         return d
-            
-    def send_command(self,command, keep_pause=True):
+        
+    def send_command(self,command, deferred = None, keep_pause="pausing_keep"):
         if keep_pause:
-            cmd = 'pausing_keep ' + command + '\n'
+            cmd = keep_pause + ' ' + command + '\n'
         else:
             cmd = command + '\n'
-        self.transport.write(cmd)
-        d = self.add_line_callback()
-        d.addCallback(self.receive_echo,cmd.strip())
+        self.send_queue.put_nowait((cmd,deferred))
+        self.do_commands()
         
-    def send_command_with_reply(self,command, keep_pause=True):
-        self.send_command(command, keep_pause)
-        return self.add_line_callback()
+    def send_command_with_reply(self,command, keep_pause="pausing_keep"):
+        dfr = defer.Deferred()
+        self.send_command(command, dfr)
+        return dfr
         
-    def get_property(self, prop, keep_pause=True):
+    def get_property(self, prop, keep_pause="pausing_keep"):
         d = self.send_command_with_reply('get_property ' + prop, keep_pause)
         d.addCallback(self.process_property, prop=prop)
         return d
@@ -77,19 +118,21 @@ class MPlayerProtocol(protocol.ProcessProtocol, LineOnlyReceiver):
         else:
             raise MPlayerError(response.replace('ANS_ERROR=',''))
             
-    def set_property(self, prop, value, keep_pause):
-        self.send_command('set_property ' + prop + ' ' + str(value), keep_pause)
+    def set_property(self, prop, value, keep_pause="pausing_keep"):
+        self.send_command('set_property ' + prop + ' ' + str(value), keep_pause=keep_pause)
         
 class Player(log.Loggable):
     logCategory = 'mplayer_player'
 
     def __init__(self, **kwargs):
         log.Loggable.__init__(self)
-        args_dict = {'msglevel':'all=-1:global=5',
+        args_dict = {'msglevel':'all=-1:global=4',
+                'msgmodule': None,
                 'slave': None,
-                'idle': None}
+                'idle': None,
+                'volume': '75'}
         args_dict.update(kwargs)
-        args = ['mplayer']
+        args = ['/usr/bin/mplayer']
         for k,v in args_dict.items():
             args += ['-'+k]
             if v is not None:
@@ -103,6 +146,8 @@ class Player(log.Loggable):
         self.views = []
         self.state = "STOPPED"
         self.current_uri = None
+        self.volume = 75
+        self.muted = False
 
     def add_view(self, view):
         self.views.append(view)
@@ -123,9 +168,13 @@ class Player(log.Loggable):
 
     @defer.inlineCallbacks
     def query_position(self):
+        self.warn("Checking position")
         position = yield self.player.get_property('time_pos')
         position = float(position)
         if self.duration == None:
+            self.warn("Checking duration")
+            #sleep for 0.1 seconds
+            yield task.deferLater(reactor,0.1,lambda: 0.1)
             self.duration = yield self.player.get_property('length')
             self.duration = float(self.duration)
         r = {}
@@ -133,14 +182,19 @@ class Player(log.Loggable):
             self.duration = None
             self.debug("duration unknown")
             defer.returnValue(r)
-        r[u'raw'] = {u'position': unicode(str(position)), u'remaining': unicode(str(self.duration - position)), u'duration': unicode(str(self.duration))}
+        r[u'raw'] = {u'position': position, 
+                     u'remaining': self.duration - position, 
+                     u'duration': self.duration}
 
-        position_human = u'%d:%02d' % (divmod(position, 60))
-        duration_human = u'%d:%02d' % (divmod(self.duration, 60))
-        remaining_human = u'%d:%02d' % (divmod(self.duration - position, 60))
+        position_human = format_time(position)
+        duration_human = format_time(self.duration)
+        remaining_human = format_time(self.duration - position)
 
-        r[u'human'] = {u'position': position_human, u'remaining': remaining_human, u'duration': duration_human}
-        r[u'percent'] = {u'position': position * 100 / self.duration, u'remaining': 100 - (position * 100 / self.duration)}
+        r[u'human'] = {u'position': position_human, 
+                       u'remaining': remaining_human, 
+                       u'duration': duration_human}
+        r[u'percent'] = {u'position': position * 100 / self.duration,
+                         u'remaining': 100 - (position * 100 / self.duration)}
 
         self.debug(r)
         defer.returnValue(r)
@@ -157,22 +211,23 @@ class Player(log.Loggable):
 
     def play(self):
         self.debug("play -->")
-        if self.state in ('STOPPED','PAUSED'):
-            self.player.send_command('pause', keep_pause=False)
+        self.pause(False)
         self.state = "PLAYING"
         self.debug("play <--")
 
-    def pause(self):
+    def pause(self, on=True):
         self.debug("pause --> %r", self.get_uri())
-        if self.state=="PLAYING":
-            self.player.send_command('pause', keep_pause=False)
-        self.state = "PAUSED"
+        if on:
+            self.player.send_command('pause', keep_pause='pausing_keep_force')
+            self.state = "PAUSED"
+        else:
+            self.player.send_command('seek 0', keep_pause=False)
+            self.state = "PLAYING"
         self.debug("pause <--")
 
     def stop(self):
         self.debug("stop --> %r", self.get_uri())
-        if self.state=="PLAYING":
-            self.player.send_command("pause", keep_pause=False)
+        self.pause()
         self.seek('0')
         self.state = "STOPPED"
         self.update(message="STOPPED")
@@ -184,7 +239,6 @@ class Player(log.Loggable):
                             +nL = relative seek forward n seconds
                             -nL = relative seek backwards n seconds
         """
-        print "seek" + location
         if location[0] in '+-':
             self.player.send_command('seek %s 0' % location)
         else:
@@ -192,17 +246,20 @@ class Player(log.Loggable):
 
     def mute(self):
         self.player.send_command("mute 1")
+        self.muted = True
 
     def unmute(self):
         self.player.send_command("mute 0")
+        self.muted = False
 
     def get_mute(self):
-        return self.player.get_property("mute")
+        return self.muted
         
     def get_volume(self):
-        return self.player.get_property("volume")
+        return self.volume
 
     def set_volume(self, volume):
+        self.volume = volume
         self.player.set_property("volume",volume)
 
 class MPlayerPlayer(log.Loggable, Plugin):
@@ -305,24 +362,28 @@ class MPlayerPlayer(log.Loggable, Plugin):
         self.info("update %r", state)
         self._update_transport_position(state)
 
+    @defer.inlineCallbacks
     def _update_transport_position(self, state):
         connection_manager = self.server.connection_manager_server
         av_transport = self.server.av_transport_server
         conn_id = connection_manager.lookup_avt_id(self.current_connection_id)
 
-        position = self.player.query_position()
+        try:
+            position = yield self.player.query_position()
+        except defer.TimeoutError:
+            defer.returnValue(None)
         #print position
 
         if position.has_key(u'raw'):
 
             if self.duration == None and 'duration' in position[u'raw']:
-                self.duration = int(position[u'raw'][u'duration'])
+                self.duration = float(position[u'raw'][u'duration'])
                 if self.metadata != None and len(self.metadata) > 0:
                     # FIXME: duration breaks client parsing MetaData?
                     elt = DIDLLite.DIDLElement.fromString(self.metadata)
                     for item in elt:
                         for res in item.findall('res'):
-                            formatted_duration = self._format_time(self.duration)
+                            formatted_duration = format_time(self.duration)
                             res.attrib['duration'] = formatted_duration
 
                     self.metadata = elt.toString()
@@ -335,40 +396,28 @@ class MPlayerPlayer(log.Loggable, Plugin):
                                                   'CurrentTrackMetaData',
                                                   self.metadata)
 
-            self.info("%s %d/%d/%d - %d%%/%d%% - %s/%s/%s", state,
-                      string.atol(position[u'raw'][u'position']),
-                      string.atol(position[u'raw'][u'remaining']),
-                      string.atol(position[u'raw'][u'duration']),
+            self.info("%s %f/%f/%f - %f%%/%f%% - %s/%s/%s", state,
+                      string.atof(position[u'raw'][u'position']),
+                      string.atof(position[u'raw'][u'remaining']),
+                      string.atof(position[u'raw'][u'duration']),
                       position[u'percent'][u'position'],
                       position[u'percent'][u'remaining'],
                       position[u'human'][u'position'],
                       position[u'human'][u'remaining'],
                       position[u'human'][u'duration'])
 
-            duration = string.atol(position[u'raw'][u'duration'])
-            formatted = self._format_time(duration)
+            formatted = format_time(position[u'raw'][u'duration'])
             av_transport.set_variable(conn_id, 'CurrentTrackDuration', formatted)
             av_transport.set_variable(conn_id, 'CurrentMediaDuration', formatted)
 
-            position = string.atol(position[u'raw'][u'position'])
-            formatted = self._format_time(position)
+            formatted = format_time(position[u'raw'][u'position'])
             av_transport.set_variable(conn_id, 'RelativeTimePosition', formatted)
             av_transport.set_variable(conn_id, 'AbsoluteTimePosition', formatted)
 
-    def _format_time(self, time):
-        fmt = '%d:%02d:%02d'
-        try:
-            m, s = divmod(time / 1000000000, 60)
-            h, m = divmod(m, 60)
-        except:
-            h = m = s = 0
-            fmt = '%02d:%02d:%02d'
-        formatted = fmt % (h, m, s)
-        return formatted
 
     def load(self, uri, metadata, mimetype=None):
         self.info("loading: %r %r ", uri, mimetype)
-        _, state, _ = self.player.get_state()
+        state = self.player.get_state()
         connection_id = self.server.connection_manager_server.lookup_avt_id(self.current_connection_id)
         self.stop(silent=True)  # the check whether a stop is really needed is done inside stop
 
@@ -431,7 +480,7 @@ class MPlayerPlayer(log.Loggable, Plugin):
         self.info('Stopping: %r', self.player.get_uri())
         if self.player.get_uri() == None:
             return
-        if self.player.get_state()[1] in ["PLAYING", "PAUSED"]:
+        if self.player.get_state() in ["PLAYING", "PAUSED"]:
             self.player.stop()
             if silent is True:
                 self.server.av_transport_server.set_variable(self.server.connection_manager_server.lookup_avt_id(self.current_connection_id), 'TransportState', 'STOPPED')
@@ -615,8 +664,10 @@ class MPlayerPlayer(log.Loggable, Plugin):
         self.server.av_transport_server.set_variable(0, 'TransportStatus', 'OK', default=True)
         self.server.av_transport_server.set_variable(0, 'CurrentPlayMode', 'NORMAL', default=True)
         self.server.av_transport_server.set_variable(0, 'CurrentTransportActions', '', default=True)
-        self.server.rendering_control_server.set_variable(0, 'Volume', self.get_volume())
-        self.server.rendering_control_server.set_variable(0, 'Mute', self.get_mute())
+        volume = self.get_volume()
+        mute = self.get_mute()
+        self.server.rendering_control_server.set_variable(0, 'Volume', volume)
+        self.server.rendering_control_server.set_variable(0, 'Mute', mute)
 
     def upnp_Play(self, *args, **kwargs):
         InstanceID = int(kwargs['InstanceID'])
@@ -782,8 +833,11 @@ class MPlayerPlayer(log.Loggable, Plugin):
 
 if __name__ == '__main__':
     from twisted.python import log as log2
+    from coherence.base import Coherence, Plugins
     import sys
     log2.startLogging(sys.stdout)
+
+    test = "Plugin"
     
     def printer(var):
         print var
@@ -800,20 +854,26 @@ if __name__ == '__main__':
         reactor.callLater(time,printer,"calling: " + func.__name__)
         reactor.callLater(time+0.01, func, *args, **kwargs)
 
-    p = Player()
-    callLater(1,p.load,'a.mp3','audio/mp3')
-#    callLater(3,p.seek,'+30')
-    show_results(3,p.query_position)
-#    callLater(6,p.mute)
-#    show_results(8,p.get_mute)
-#    callLater(10,p.unmute)
-#    show_results(10,p.get_mute)
-#    show_results(12,p.get_volume)
-#    callLater(14,p.set_volume,25)
-#    show_results(16,p.get_volume)
-    callLater(4,p.pause)
-    callLater(8,p.play)
-    callLater(12,p.stop)
-    callLater(16,p.play)
+    if test=="Player":
+        p = Player()
+        callLater(1,p.load,'a.mp3','audio/mp3')
+        callLater(3,p.seek,'+30')
+        show_results(5,p.query_position)
+        callLater(6,p.mute)
+        show_results(8,p.get_mute)
+        callLater(10,p.unmute)
+        show_results(10,p.get_mute)
+        show_results(12,p.get_volume)
+        callLater(14,p.set_volume,25)
+        show_results(16,p.get_volume)
+        callLater(18,p.pause)
+        callLater(20,p.play)
+        callLater(21.5,p.stop)
+        callLater(25,p.play)
     
+    if test=="Plugin":
+        plugs = Plugins()
+        plugs['MPlayerPlayer'] = MPlayerPlayer
+        c = Coherence({'logmode':'warning',
+                       'plugins':{'MPlayerPlayer': {'name':'Tingbot'}}})
     reactor.run()
