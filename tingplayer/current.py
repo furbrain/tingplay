@@ -6,6 +6,7 @@ from tingbot import Image
 
 from layout import MAIN_PANEL
 import utils
+from coherence.upnp.core import DIDLLite
 
 def hms_to_seconds(value):
     secs = 0
@@ -22,12 +23,9 @@ def seconds_to_ms(value):
     value = int(value)
     return ("%d:%02d" % divmod(value,60))
     
-def get_url_metadata(track):
-    resources = track['resources']
-    for prefix in ['http','ftp','rtsp','']:
-        for x,y in resources.items():
-            if x.startswith(prefix):
-                return x, y
+def get_url_metadata(track,protocols):
+    r = track.res.get_matching(protocols)
+    return r[0].data, r[0].protocolInfo
     
 class AlbumButton(gui.Button):
     def __init__(self, xy, size, align="center", parent=None, art_url = None):
@@ -96,7 +94,9 @@ class CurrentPanel(gui.Panel):
         self.playlist = None
         self.transport_state = None
         self.play_timer = None
-                
+        self.protocols = []
+    
+    @defer.inlineCallbacks            
     def set_renderer(self,name,renderer):
         print "Selecting renderer: " + name
         if renderer==self.renderer: return
@@ -117,6 +117,9 @@ class CurrentPanel(gui.Panel):
         volume_variable = self.renderer.rendering_control.service.get_state_variable('Volume')
         self.volume_slider.max_val = int(volume_variable.allowed_value_range['maximum'])
         self.volume_slider.update()
+        if renderer.connection_manager:
+            protocols = yield renderer.connection_manager.get_protocol_info()
+            self.protocols = protocols['Sink'].split(',')
         
     def set_playlist(self,playlist):
         self.playlist = playlist
@@ -168,28 +171,37 @@ class CurrentPanel(gui.Panel):
     @defer.inlineCallbacks
     def play(self,track = None):
         if track is not None:
+            library = track['library']
+            track = track['track']
             self.track = track
-            self.title.label = track['title']
-            self.artist.label = track['artist']
-            self.album.label = track['album']
-            if 'albumArtURI' in track is not None:
-                self.album_art.set_art(track['albumArtURI'])
-            else:
-                self.album_art.set_art(None)
+            self.title.label = track.title
+            self.artist.label = track.artist
+            self.album.label = track.album
+            self.album_art.set_art(track.albumArtURI)
             if self.renderer:
                 InstanceID = 0
+                track_url, meta_data = get_url_metadata(track,self.protocols)
                 if self.renderer.connection_manager.service.get_action('PrepareForConnection'):
+                    connection_manager_id = library.connection_manager.connection_manager_id()
+                    result = yield self.renderer.connection_manager.prepare_for_connection(
+                                    remote_protocol_info=meta_data,
+                                    peer_connection_manager=connection_manager_id,
+                                    peer_connection_id="-1",
+                                    direction="Input")
                     print "prepare for connection exists. Damn"
-                track_url, meta_data = (get_url_metadata(track))
+                    print result
                 try:
                     if self.transport_state=="PLAYING":
                         yield self.renderer.av_transport.stop()
+                    metadata = DIDLLite.DIDLElement()
+                    metadata.addItem(track)
                     yield self.renderer.av_transport.set_av_transport_uri(
                                         instance_id=InstanceID,
                                         current_uri=track_url,
-                                        current_uri_metadata=meta_data)
+                                        current_uri_metadata=metadata.toString())
                     yield self.renderer.av_transport.play(instance_id=InstanceID)
                 except Exception as err:
+                    print err
                     gui.message_box(message=err)
                 self.start_position_timer()
             self.update(downwards=True)

@@ -276,8 +276,9 @@ class MPlayerPlayer(log.Loggable, Plugin):
     def __init__(self, device, **kwargs):
         log.Loggable.__init__(self)
         self.name = kwargs.get('name', 'MPlayer Audio Player')
+        self.mplayer_args = kwargs.get('mplayer_args',{})
 
-        self.player = Player()
+        self.player = Player(**self.mplayer_args)
         self.player.add_view(self.update)
 
         self.metadata = None
@@ -779,7 +780,8 @@ class MPlayerPlayer(log.Loggable, Plugin):
         InstanceID = int(kwargs['InstanceID'])
         CurrentURI = kwargs['CurrentURI']
         CurrentURIMetaData = kwargs['CurrentURIMetaData']
-        #print "upnp_SetAVTransportURI",InstanceID, CurrentURI, CurrentURIMetaData
+        self.info("upnp_SetAVTransportURI, %s, %s, %s" % (InstanceID, CurrentURI, CurrentURIMetaData))
+        print CurrentURIMetaData
         if CurrentURI.startswith('dlna-playcontainer://'):
             def handle_result(r):
                 self.load(r[0], r[1], mimetype=r[2])
@@ -800,6 +802,7 @@ class MPlayerPlayer(log.Loggable, Plugin):
             local_protocol_infos = self.server.connection_manager_server.get_variable('SinkProtocolInfo').value.split(',')
             #print local_protocol_infos
             elt = DIDLLite.DIDLElement.fromString(CurrentURIMetaData)
+            print elt.numItems()
             if elt.numItems() == 1:
                 item = elt.getItems()[0]
                 res = item.res.get_matching(local_protocol_infos, protocol_type='internal')

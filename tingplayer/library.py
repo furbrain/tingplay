@@ -2,6 +2,8 @@ import threading
 import urllib2
 from functools import partial
 
+from coherence.upnp.core import DIDLLite
+
 import tingbot_gui as gui
 from layout import MAIN_PANEL
 import utils
@@ -25,8 +27,12 @@ class LibraryPanel(gui.Panel):
         self.library = None
         self.playlist_panel=playlist_panel
         
+    def process_result(self, result):
+        return DIDLLite.DIDLElement.fromString(result['Result'])
+        
     def browse(self,callback,**kwargs):
-        d = self.library.content_directory.browse(**kwargs)
+        d = self.library.content_directory.browse(process_result=False, **kwargs)
+        d.addCallback(self.process_result)
         d.addCallbacks(callback,utils.errback)
         return d
             
@@ -42,7 +48,7 @@ class LibraryPanel(gui.Panel):
         self.browse(self.show_browse_results,object_id=self.browse_list[-1])
         
     def click_container(self,container):
-        obj_id = container['id']
+        obj_id = container.id
         self.browse_list.append(obj_id)
         self.browse(self.show_browse_results,object_id=obj_id)
 
@@ -52,10 +58,10 @@ class LibraryPanel(gui.Panel):
             ("Enqueue",lambda: self.playlist_panel.enqueue_tracks([item]))])
               
     def long_click_container(self,container):
-        d = self.browse(self.show_long_click_popup, object_id=container['id'])
+        d = self.browse(self.show_long_click_popup, object_id=container.id)
             
     def show_long_click_popup(self,tracks):
-        tracks = sorted(tracks['items'].values(), key=sort_items)
+        tracks = [{'library':self.library,'track':x} for x in tracks.getItems()]
         gui.PopupMenu(xy = (100,60), menu_items = [
             ("Play All",lambda: self.playlist_panel.play_tracks(tracks)),
             ("Enqueue All",lambda: self.playlist_panel.enqueue_tracks(tracks))])
@@ -64,7 +70,7 @@ class LibraryPanel(gui.Panel):
     def show_browse_results(self,results):
         dir_style = self.style.copy()
         dir_style.button_text_color=(0,255,255)
-        items = sorted(results['items'].values(), key=sort_items)
+        items = results.getItems()
         self.entries.scrolled_area.remove_all()
         item_count = len(items)
         if len(self.browse_list)>1:
@@ -79,18 +85,19 @@ class LibraryPanel(gui.Panel):
                             callback = self.click_parent)    
             index += 1
         for i in items:
-            if 'container' in i['upnp_class']:
+            if 'container' in i.upnp_class:
                 gui.PopupButton((0,30*index), (300,30), align="topleft",
                                 parent=self.entries.scrolled_area,
                                 style=dir_style,
-                                label=i['title'],
+                                label=i.title,
                                 callback = partial(self.click_container,i),
                                 long_click_callback = partial(self.long_click_container,i))
             else:
+                r = {'library':self.library,'track':i}
                 gui.PopupButton((0,30*index), (300,30), align="topleft",
                                 parent=self.entries.scrolled_area,
-                                label=i['title'],
-                                callback = partial(self.click_item,i))
+                                label=i.title,
+                                callback = partial(self.click_item,r))
             index += 1
         self.entries.update(downwards=True)
         

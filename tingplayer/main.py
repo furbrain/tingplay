@@ -1,20 +1,28 @@
 #!/usr/bin/env python
-from twisted.internet import _threadedselect
+import time
+import re
+import logging
+
+from twisted.internet import _threadedselect, defer, utils
 _threadedselect.install()
 
 
-from twisted.python import log
+from coherence.base import Coherence, ControlPoint, Plugins
+from coherence.upnp.devices.media_renderer import MediaRenderer
+from twisted.python import log as logt
 import sys
-log.startLogging(sys.stdout)
+logt.startLogging(sys.stdout)
 
-from coherence.base import Coherence, ControlPoint
+import coherence.log as log
+
 import tingbot
+from tingbot.platform_specific import  is_running_on_tingbot
 import tingbot_gui as gui
 from layout import NOTEBOOK_BUTTON_SIZE,MAIN_PANEL
 import library
 import playlist
 import current
-import time
+import mplayer_renderer
 
 tingbot.screen.fill("black")
 
@@ -31,14 +39,53 @@ lib_panel = library.LibraryPanel(playlist_panel)
 nb = gui.NoteBook([(lib_button,lib_panel),(playlist_button,playlist_panel),(current_button,current_panel)])
 gui.get_root_widget().update(downwards=True)
 
-#set up twisted
-def setUp():
-    coherence_config = {'logmode':'warning',
-                        'plugins':{'GStreamerPlayer': {'name':'Tingbot'}}}
+def printer(device):
+    print device
+
+def add_local_devices(c, cp):
+    for device in c.active_backends.values():
+        if isinstance(device,MediaRenderer):
+            cp.check_device(device.server)
+    print "PLIB: "
+    print c.active_backends
+    print c.get_nonlocal_devices()
+    
+def setUpCoherence(create_renderer=False, **args):
+    from twisted.internet import reactor
+    print "go coherence"
+    coherence_config = {'logmode':'warning'}
+    if create_renderer:
+        plugs = Plugins()
+        plugs['MPlayerPlayer'] = mplayer_renderer.MPlayerPlayer
+        coherence_config['plugins'] = {'MPlayerPlayer': {'name':'Tingbot','mplayer_args':args}}
     control_point = ControlPoint(Coherence(coherence_config),
                                  auto_client=['MediaRenderer', 'MediaServer'])
     control_point.connect(lib_panel.add_library, 'Coherence.UPnP.ControlPoint.MediaServer.detected')
     control_point.connect(current_panel.add_renderer, 'Coherence.UPnP.ControlPoint.MediaRenderer.detected')
+
+#set up twisted
+@defer.inlineCallbacks
+def setUp():
+    print "setting up"
+    if not is_running_on_tingbot():
+        setUpCoherence(True)
+    else:
+        aplay_results = yield utils.getProcessOutput('/usr/bin/aplay','-l')
+        cards = re.findall(r'^card (\d+):.*USB', aplay_results, re.M)
+        if cards:
+            args = {'ao':'alsa:device=hw=%s.0' % cards[0],
+                    'vo':'null'}
+            setUpCoherence(True, **args)
+        else:
+            hdmi_status = yield utils.getProcessOutput('/usr/bin/tvservice','-s')
+            if '640x480' not in hdmi_status:
+                setUpCoherence(True)
+            else:
+                setUpCoherence()
+    
+    #detect HDMI attached
+
+log.init(loglevel=logging.INFO)
     
 from twisted.internet import reactor
 reactor.callWhenRunning(setUp)
