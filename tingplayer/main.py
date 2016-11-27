@@ -16,6 +16,7 @@ logt.startLogging(sys.stdout)
 import coherence.log as log
 
 import tingbot
+import pygame
 from tingbot.platform_specific import  is_running_on_tingbot
 import tingbot_gui as gui
 from layout import NOTEBOOK_BUTTON_SIZE,MAIN_PANEL
@@ -68,7 +69,7 @@ def setUpCoherence(create_renderer=False, **args):
 def setUp():
     print "setting up"
     if not is_running_on_tingbot():
-        setUpCoherence(True)
+        setUpCoherence(True, ao="openal")
     else:
         aplay_results = yield utils.getProcessOutput('/usr/bin/aplay','-l')
         cards = re.findall(r'^card (\d+):.*USB', aplay_results, re.M)
@@ -85,11 +86,10 @@ def setUp():
     
     #detect HDMI attached
 
-log.init(loglevel=logging.INFO)
-    
+pygame.mixer.quit()    
 from twisted.internet import reactor
 reactor.callWhenRunning(setUp)
-reactor.interleave(tingbot.main_run_loop.callAfter)
+reactor.interleave(tingbot.main_run_loop.call_after)
 try:
     tingbot.run()
 finally:
@@ -98,5 +98,5 @@ finally:
     print "clearing the queue"
     for i in range(30):
         time.sleep(0.03)
-        tingbot.main_run_loop.clearQueue()
+        tingbot.main_run_loop.empty_call_after_queue()
     print "exiting"
