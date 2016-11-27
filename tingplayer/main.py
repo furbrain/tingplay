@@ -71,7 +71,7 @@ def setUp():
     if not is_running_on_tingbot():
         setUpCoherence(True, ao="openal")
     else:
-        aplay_results = yield utils.getProcessOutput('/usr/bin/aplay','-l')
+        aplay_results = yield utils.getProcessOutput('/usr/bin/aplay',['-l'])
         cards = re.findall(r'^card (\d+):.*USB', aplay_results, re.M)
         if cards:
             args = {'ao':'alsa:device=hw=%s.0' % cards[0],
@@ -86,9 +86,14 @@ def setUp():
     
     #detect HDMI attached
 
+def pygame_quit():
+    ev = pygame.event.Event(pygame.QUIT)
+    pygame.event.post(ev)
+
 pygame.mixer.quit()    
 from twisted.internet import reactor
 reactor.callWhenRunning(setUp)
+reactor.addSystemEventTrigger('after', 'shutdown', pygame_quit, true)
 reactor.interleave(tingbot.main_run_loop.call_after)
 try:
     tingbot.run()
