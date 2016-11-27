@@ -157,7 +157,7 @@ class CurrentPanel(gui.Panel):
         self.volume_label.update()
             
     def final_volume_cb(self,value):
-        self.renderer.rendering_control.set_volume(desired_volume=int(value))
+        self.renderer.rendering_control.set_volume(instance_id = self.rcs_id, desired_volume=int(value))
         
     def start_position_timer(self):
         if not self.play_timer:
@@ -179,28 +179,29 @@ class CurrentPanel(gui.Panel):
             self.album.label = track.album
             self.album_art.set_art(track.albumArtURI)
             if self.renderer:
-                InstanceID = 0
                 track_url, meta_data = get_url_metadata(track,self.protocols)
-                if self.renderer.connection_manager.service.get_action('PrepareForConnection'):
-                    connection_manager_id = library.connection_manager.connection_manager_id()
-                    result = yield self.renderer.connection_manager.prepare_for_connection(
-                                    remote_protocol_info=meta_data,
-                                    peer_connection_manager=connection_manager_id,
-                                    peer_connection_id="-1",
-                                    direction="Input")
-                    print "prepare for connection exists. Damn"
-                    print result
                 try:
-                    if self.transport_state=="PLAYING":
-                        yield self.renderer.av_transport.stop()
+                    if self.renderer.connection_manager.service.get_action('PrepareForConnection'):
+                        connection_manager_id = library.connection_manager.connection_manager_id()
+                        result = yield self.renderer.connection_manager.prepare_for_connection(
+                                        remote_protocol_info=meta_data,
+                                        peer_connection_manager=connection_manager_id,
+                                        peer_connection_id="-1",
+                                        direction="Input")
+                        self.rcs_id = result['RcsID']
+                        self.avt_id = result['AVTransportID']
+                    else:
+                        self.rcs_id = 0
+                        self.avt_id = 0
                     metadata = DIDLLite.DIDLElement()
                     metadata.addItem(track)
                     yield self.renderer.av_transport.set_av_transport_uri(
-                                        instance_id=InstanceID,
+                                        instance_id=self.avt_id,
                                         current_uri=track_url,
                                         current_uri_metadata=metadata.toString())
-                    yield self.renderer.av_transport.play(instance_id=InstanceID)
+                    yield self.renderer.av_transport.play(instance_id=self.avt_id)
                 except Exception as err:
+                    print "Exception received"
                     print err
                     gui.message_box(message=err)
                 self.start_position_timer()
@@ -209,7 +210,7 @@ class CurrentPanel(gui.Panel):
     def stop(self):
         self.stop_timer()
         if self.transport_state=="PLAYING":
-            self.renderer.av_transport.stop()
+            self.renderer.av_transport.stop(instance_id=self.avt_id)
         
            
     def add_renderer(self,client, udn):
