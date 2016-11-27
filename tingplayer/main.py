@@ -71,7 +71,7 @@ def setUp():
     if not is_running_on_tingbot():
         setUpCoherence(True, ao="openal")
     else:
-        aplay_results = yield utils.getProcessOutput('/usr/bin/aplay','-l')
+        aplay_results = yield utils.getProcessOutput('/usr/bin/aplay',['-l'])
         cards = re.findall(r'^card (\d+):.*USB', aplay_results, re.M)
         if cards:
             args = {'ao':'alsa:device=hw=%s.0' % cards[0],
