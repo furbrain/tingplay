@@ -5,8 +5,10 @@ from functools import partial
 from coherence.upnp.core import DIDLLite
 
 import tingbot_gui as gui
+import tingbot
 from layout import MAIN_PANEL
 import utils
+import time
 
 def sort_items(v):
     if 'container' in v['upnp_class']:
@@ -26,6 +28,7 @@ class LibraryPanel(gui.Panel):
         library_label = gui.StaticText((0,0),(60,30),align="topleft",parent=self, label = "Library:",text_align="right")
         self.library = None
         self.playlist_panel=playlist_panel
+        self.init_time = time.time()
         
     def process_result(self, result):
         return DIDLLite.DIDLElement.fromString(result['Result'])
@@ -38,10 +41,12 @@ class LibraryPanel(gui.Panel):
             
         
     def library_selected(self,name,library):
-        if library:
-            self.library=library
-            self.browse_list = ["0"]
-            self.browse(self.show_browse_results)
+        if library is None: return
+        if library == self.library: return
+        tingbot.app.settings['last_server'] = name
+        self.library=library
+        self.browse_list = ["0"]
+        self.browse(self.show_browse_results)
                 
     def click_parent(self):
         self.browse_list.pop()
@@ -106,6 +111,10 @@ class LibraryPanel(gui.Panel):
             self.library_dropdown.values[:] = []
             self.library_dropdown.selected = ("Select Library",None)
         self.library_dropdown.values.append((client.device.friendly_name, client))
+        if client.device.friendly_name == tingbot.app.settings['last_server']:
+            if time.time()-self.init_time < 5:
+                self.library_selected(client.device.friendly_name, client)
+                self.library_dropdown.selected = (client.device.friendly_name, client)
         self.library_dropdown.update()
     
     

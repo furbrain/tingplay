@@ -1,8 +1,10 @@
 from twisted.internet import defer
 import pygame.transform
+import time
 
 import tingbot_gui as gui
 from tingbot import Image
+import tingbot
 
 from layout import MAIN_PANEL
 import utils
@@ -95,11 +97,13 @@ class CurrentPanel(gui.Panel):
         self.transport_state = None
         self.play_timer = None
         self.protocols = []
+        self.init_time = time.time()
     
     @defer.inlineCallbacks            
     def set_renderer(self,name,renderer):
         print "Selecting renderer: " + name
         if renderer==self.renderer: return
+        tingbot.app.settings['last_renderer'] = name
         self.stop_timer()
         if renderer is None: return
         if self.renderer:
@@ -218,6 +222,10 @@ class CurrentPanel(gui.Panel):
             self.renderer_dropdown.values[:] = []
             self.renderer_dropdown.selected = ("Select Player",None)
         self.renderer_dropdown.values.append((client.device.friendly_name,client))
+        if client.device.friendly_name == tingbot.app.settings['last_renderer']:
+            if time.time() - self.init_time < 5:
+                self.set_renderer(client.device.friendly_name,client)
+                self.renderer_dropdown.selected = (client.device.friendly_name,client)
         self.renderer_dropdown.update()
                     
     def transport_state_changed(self, variable):

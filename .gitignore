@@ -25,3 +25,7 @@ htmlcov/
 
 #my local docs
 /local_docs
+
+#settings files
+tingplayer/local_settings.json
+tingplayer/settings.json
