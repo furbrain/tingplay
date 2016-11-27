@@ -10,6 +10,7 @@ import Queue
 from twisted.protocols.basic import LineOnlyReceiver
 from twisted.internet import reactor, defer, protocol, task
 from twisted.python import failure
+from twisted.python import log as log2
 
 from coherence.upnp.core.soap_service import errorCode
 from coherence.upnp.core import DIDLLite
@@ -41,9 +42,10 @@ class MPlayerError(Exception):
     pass
     
 class MPlayerProtocol(protocol.ProcessProtocol, LineOnlyReceiver, log.Loggable):
-    def __init__(self):
-        self.send_queue = Queue.Queue(10)
+    def __init__(self, stopped_callback):
+        self.send_queue = Queue.Queue(40)
         self.current_callback = None
+        self.stopped_callback = stopped_callback
 
     def outReceived(self, data):
         self.dataReceived(data)
@@ -51,16 +53,18 @@ class MPlayerProtocol(protocol.ProcessProtocol, LineOnlyReceiver, log.Loggable):
     def lineReceived(self, line):
         if line.startswith("   GLOBAL: ANS_"):
             line = line[10:]
-            self.warn('LINE: ' + line)
             if self.current_callback:
                 self.current_callback.callback(line)
                 self.send_queue.task_done()
                 self.current_callback = None
                 if not self.send_queue.empty():
                     self.do_commands()
+        if line.startswith(" DECAUDIO: Uninit audio filters"):
+            self.stopped_callback()
+        
         
     def handle_timeout(self, value, timeout):
-        self.info("Timeout occurred: %s" % repr(timeout))
+        self.info("Timeout occurred: %s %s" % (repr(value), repr(timeout)))
         if self.current_callback:
             self.current_callback = None
             self.send_queue.task_done()
@@ -73,15 +77,15 @@ class MPlayerProtocol(protocol.ProcessProtocol, LineOnlyReceiver, log.Loggable):
         if not self.current_callback:
             try:
                 cmd, self.current_callback = self.send_queue.get_nowait()
-                self.debug("Command called: " + cmd)
-                self.transport.write(cmd)
-                if self.current_callback is None:
-                    self.send_queue.task_done()
-                else:
-                    self.current_callback.addTimeout(0.5,reactor,self.handle_timeout)
-                reactor.callLater(0.1,self.do_commands)
             except Queue.Empty:
-                pass                  
+                return
+            self.debug("Command called: " + cmd)
+            self.transport.write(cmd)
+            if self.current_callback is None:
+                self.send_queue.task_done()
+            else:
+                self.current_callback.addTimeout(0.5,reactor,self.handle_timeout)
+            reactor.callLater(0.1,self.do_commands)
         
     def receive_echo(self, line, expected):
         if line != expected:
@@ -97,6 +101,7 @@ class MPlayerProtocol(protocol.ProcessProtocol, LineOnlyReceiver, log.Loggable):
             cmd = keep_pause + ' ' + command + '\n'
         else:
             cmd = command + '\n'
+        self.debug("Queue size: %d, command %s" % (self.send_queue.qsize(),cmd))
         self.send_queue.put_nowait((cmd,deferred))
         self.do_commands()
         
@@ -126,7 +131,7 @@ class Player(log.Loggable):
 
     def __init__(self, **kwargs):
         log.Loggable.__init__(self)
-        args_dict = {'msglevel':'all=-1:global=4',
+        args_dict = {'msglevel':'all=-1:global=4:decaudio=6',
                 'msgmodule': None,
                 'slave': None,
                 'idle': None,
@@ -137,7 +142,7 @@ class Player(log.Loggable):
             args += ['-'+k]
             if v is not None:
                 args += [v]
-        self.player = MPlayerProtocol()
+        self.player = MPlayerProtocol(lambda: self.update("STOPPED"))
         reactor.spawnProcess(self.player, 
                              executable = '/usr/bin/mplayer',
                              args=args,
@@ -156,6 +161,7 @@ class Player(log.Loggable):
         self.views.remove(view)
 
     def update(self, message=None):
+        self.debug("update " + message)
         for v in self.views:
             v(message=message)
 
@@ -168,19 +174,17 @@ class Player(log.Loggable):
 
     @defer.inlineCallbacks
     def query_position(self):
-        self.warn("Checking position")
+        self.info("Checking position")
         position = yield self.player.get_property('time_pos')
         position = float(position)
         if self.duration == None:
-            self.warn("Checking duration")
-            #sleep for 0.1 seconds
-            yield task.deferLater(reactor,0.1,lambda: 0.1)
+            self.info("Checking duration")
             self.duration = yield self.player.get_property('length')
             self.duration = float(self.duration)
         r = {}
         if self.duration == 0:
             self.duration = None
-            self.debug("duration unknown")
+            self.info("duration unknown")
             defer.returnValue(r)
         r[u'raw'] = {u'position': position, 
                      u'remaining': self.duration - position, 
@@ -196,7 +200,7 @@ class Player(log.Loggable):
         r[u'percent'] = {u'position': position * 100 / self.duration,
                          u'remaining': 100 - (position * 100 / self.duration)}
 
-        self.debug(r)
+        self.debug("Time info" + repr(r))
         defer.returnValue(r)
 
     def load(self, uri, mimetype):
@@ -206,7 +210,10 @@ class Player(log.Loggable):
         self.duration = None
         self.mimetype = mimetype
         self.tags = {}
-        self.state = "PLAYING"
+        if self.state != "PLAYING":
+            old_state = self.state
+            self.pause()
+            self.state = old_state
         self.debug("load <--")
 
     def play(self):
@@ -361,19 +368,18 @@ class MPlayerPlayer(log.Loggable, Plugin):
             av_transport.set_variable(conn_id, 'TransportState', 'STOPPED')
 
         self.info("update %r", state)
-        self._update_transport_position(state)
+        self._update_transport_position()
 
     @defer.inlineCallbacks
-    def _update_transport_position(self, state):
+    def _update_transport_position(self):
         connection_manager = self.server.connection_manager_server
         av_transport = self.server.av_transport_server
         conn_id = connection_manager.lookup_avt_id(self.current_connection_id)
 
         try:
             position = yield self.player.query_position()
-        except defer.TimeoutError:
+        except (defer.TimeoutError, defer.CancelledError, MPlayerError):
             defer.returnValue(None)
-        #print position
 
         if position.has_key(u'raw'):
 
@@ -388,7 +394,6 @@ class MPlayerPlayer(log.Loggable, Plugin):
                             res.attrib['duration'] = formatted_duration
 
                     self.metadata = elt.toString()
-                    #print self.metadata
                     if self.server != None:
                         av_transport.set_variable(conn_id,
                                                   'AVTransportURIMetaData',
@@ -397,7 +402,7 @@ class MPlayerPlayer(log.Loggable, Plugin):
                                                   'CurrentTrackMetaData',
                                                   self.metadata)
 
-            self.info("%s %f/%f/%f - %f%%/%f%% - %s/%s/%s", state,
+            self.info("%f/%f/%f - %f%%/%f%% - %s/%s/%s",
                       string.atof(position[u'raw'][u'position']),
                       string.atof(position[u'raw'][u'remaining']),
                       string.atof(position[u'raw'][u'duration']),
@@ -412,16 +417,17 @@ class MPlayerPlayer(log.Loggable, Plugin):
             av_transport.set_variable(conn_id, 'CurrentMediaDuration', formatted)
 
             formatted = format_time(position[u'raw'][u'position'])
+            counter = position[u'raw'][u'position']
             av_transport.set_variable(conn_id, 'RelativeTimePosition', formatted)
             av_transport.set_variable(conn_id, 'AbsoluteTimePosition', formatted)
+            av_transport.set_variable(conn_id, 'RelativeCounterPosition', counter)
+            av_transport.set_variable(conn_id, 'AbsoluteCounterPosition', counter)
 
 
     def load(self, uri, metadata, mimetype=None):
         self.info("loading: %r %r ", uri, mimetype)
         state = self.player.get_state()
         connection_id = self.server.connection_manager_server.lookup_avt_id(self.current_connection_id)
-        self.stop(silent=True)  # the check whether a stop is really needed is done inside stop
-
         if mimetype is None:
             _, ext = os.path.splitext(uri)
             if ext == '.ogg':
@@ -781,7 +787,6 @@ class MPlayerPlayer(log.Loggable, Plugin):
         CurrentURI = kwargs['CurrentURI']
         CurrentURIMetaData = kwargs['CurrentURIMetaData']
         self.info("upnp_SetAVTransportURI, %s, %s, %s" % (InstanceID, CurrentURI, CurrentURIMetaData))
-        print CurrentURIMetaData
         if CurrentURI.startswith('dlna-playcontainer://'):
             def handle_result(r):
                 self.load(r[0], r[1], mimetype=r[2])
@@ -800,9 +805,7 @@ class MPlayerPlayer(log.Loggable, Plugin):
             return {}
         else:
             local_protocol_infos = self.server.connection_manager_server.get_variable('SinkProtocolInfo').value.split(',')
-            #print local_protocol_infos
             elt = DIDLLite.DIDLElement.fromString(CurrentURIMetaData)
-            print elt.numItems()
             if elt.numItems() == 1:
                 item = elt.getItems()[0]
                 res = item.res.get_matching(local_protocol_infos, protocol_type='internal')
@@ -832,6 +835,23 @@ class MPlayerPlayer(log.Loggable, Plugin):
         DesiredVolume = int(kwargs['DesiredVolume'])
         self.set_volume(DesiredVolume)
         return {}
+        
+    @defer.inlineCallbacks    
+    def upnp_GetPositionInfo(self, *args, **kwargs):
+        yield self._update_transport_position()
+        r = {} 
+        args = {
+            'Track':'CurrentTrack',
+            'TrackDuration':'CurrentTrackDuration',
+            'TrackMetaData':'CurrentTrackMetaData',
+            'TrackURI':'CurrentTrackURI',
+            'RelTime':'RelativeTimePosition',
+            'AbsTime':'AbsoluteTimePosition',
+            'RelCount':'RelativeCounterPosition',
+            'AbsCount':'AbsoluteCounterPosition'}
+        for k,v in args.items():
+            r[k] = self.server.av_transport_server.get_variable(v).value
+        defer.returnValue(r)            
 
 
 if __name__ == '__main__':

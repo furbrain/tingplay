@@ -237,6 +237,5 @@ class CurrentPanel(gui.Panel):
                 rt = hms_to_seconds(rt.value)
                 td = hms_to_seconds(td.value)
                 if abs(td-rt)<3:
-                    print "next track"
                     self.playlist.next_track()                   
         
