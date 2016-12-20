@@ -53,7 +53,7 @@ def add_local_devices(c, cp):
     
 def setUpCoherence(create_renderer=False, **args):
     from twisted.internet import reactor
-    print "go coherence"
+    print "go coherence %r" % args
     coherence_config = {'logmode':'warning'}
     if create_renderer:
         plugs = Plugins()
@@ -69,7 +69,7 @@ def setUpCoherence(create_renderer=False, **args):
 def setUp():
     print "setting up"
     if not is_running_on_tingbot():
-        setUpCoherence(True, ao="openal")
+        setUpCoherence(True, ao="alsa")
     else:
         aplay_results = yield utils.getProcessOutput('/usr/bin/aplay',['-l'])
         cards = re.findall(r'^card (\d+):.*USB', aplay_results, re.M)
@@ -90,10 +90,11 @@ def pygame_quit():
     ev = pygame.event.Event(pygame.QUIT)
     pygame.event.post(ev)
 
+#pygame.init()
 pygame.mixer.quit()    
 from twisted.internet import reactor
 reactor.callWhenRunning(setUp)
-reactor.addSystemEventTrigger('after', 'shutdown', pygame_quit, true)
+reactor.addSystemEventTrigger('after', 'shutdown', pygame_quit)
 reactor.interleave(tingbot.main_run_loop.call_after)
 try:
     tingbot.run()

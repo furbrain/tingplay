@@ -51,6 +51,7 @@ class MPlayerProtocol(protocol.ProcessProtocol, LineOnlyReceiver, log.Loggable):
         self.dataReceived(data)
 
     def lineReceived(self, line):
+        print line
         if line.startswith("   GLOBAL: ANS_"):
             line = line[10:]
             if self.current_callback:
@@ -131,7 +132,7 @@ class Player(log.Loggable):
 
     def __init__(self, **kwargs):
         log.Loggable.__init__(self)
-        args_dict = {'msglevel':'all=-1:global=4:decaudio=6',
+        args_dict = {'msglevel':'statusline=3:global=4:decaudio=6',
                 'msgmodule': None,
                 'slave': None,
                 'idle': None,
@@ -142,6 +143,7 @@ class Player(log.Loggable):
             args += ['-'+k]
             if v is not None:
                 args += [v]
+        self.warn("MPlayer args: %r" % args)
         self.player = MPlayerProtocol(lambda: self.update("STOPPED"))
         reactor.spawnProcess(self.player, 
                              executable = '/usr/bin/mplayer',
