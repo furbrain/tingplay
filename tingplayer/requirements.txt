@@ -1,4 +1,4 @@
-https://github.com/furbrain/tingbot-gui/tarball/4a76042d8a10eedcaa35df8dff322e72e497ab96
+tingbot-gui>=0.9
 https://github.com/coherence-project/Coherence/tarball/a83d2061510c9d7b4b9b0ac472e839cadb5d5567
 twisted==16.6.0
 
