@@ -53,7 +53,6 @@ def add_local_devices(c, cp):
     
 def setUpCoherence(create_renderer=False, **args):
     from twisted.internet import reactor
-    print "go coherence %r" % args
     coherence_config = {'logmode':'warning'}
     if create_renderer:
         plugs = Plugins()
@@ -67,7 +66,6 @@ def setUpCoherence(create_renderer=False, **args):
 #set up twisted
 @defer.inlineCallbacks
 def setUp():
-    print "setting up"
     if not is_running_on_tingbot():
         setUpCoherence(True, ao="alsa")
     else:
