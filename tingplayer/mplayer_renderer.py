@@ -51,7 +51,6 @@ class MPlayerProtocol(protocol.ProcessProtocol, LineOnlyReceiver, log.Loggable):
         self.dataReceived(data)
 
     def lineReceived(self, line):
-        print line
         if line.startswith("   GLOBAL: ANS_"):
             line = line[10:]
             if self.current_callback:
@@ -143,7 +142,7 @@ class Player(log.Loggable):
             args += ['-'+k]
             if v is not None:
                 args += [v]
-        self.warn("MPlayer args: %r" % args)
+        self.debug("MPlayer args: %r" % args)
         self.player = MPlayerProtocol(lambda: self.update("STOPPED"))
         reactor.spawnProcess(self.player, 
                              executable = '/usr/bin/mplayer',
@@ -227,10 +226,11 @@ class Player(log.Loggable):
     def pause(self, on=True):
         self.debug("pause --> %r", self.get_uri())
         if on:
-            self.player.send_command('pause', keep_pause='pausing_keep_force')
+            self.player.send_command('pause', keep_pause='pausing')
             self.state = "PAUSED"
         else:
-            self.player.send_command('seek 0', keep_pause=False)
+            self.player.send_command('pause', keep_pause='pausing')
+            self.player.send_command('pause', keep_pause=False)
             self.state = "PLAYING"
         self.debug("pause <--")
 

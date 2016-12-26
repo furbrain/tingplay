@@ -84,13 +84,10 @@ def setUp():
             else:
                 setUpCoherence()
     
-    #detect HDMI attached
-
 def pygame_quit():
     ev = pygame.event.Event(pygame.QUIT)
     pygame.event.post(ev)
 
-#pygame.init()
 pygame.mixer.quit()    
 from twisted.internet import reactor
 reactor.callWhenRunning(setUp)
