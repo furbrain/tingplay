@@ -25,6 +25,7 @@ from coherence.extern.simple_plugin import Plugin
 
 from coherence import log
 
+default_pause="pausing_keep_force"
 
 def format_time(time):
     fmt = '%d:%02d:%02.2f'
@@ -46,11 +47,20 @@ class MPlayerProtocol(protocol.ProcessProtocol, LineOnlyReceiver, log.Loggable):
         self.send_queue = Queue.Queue(40)
         self.current_callback = None
         self.stopped_callback = stopped_callback
+        self.version = 0
 
     def outReceived(self, data):
         self.dataReceived(data)
 
     def lineReceived(self, line):
+        self.debug(line)
+        if self.version==0:
+            if line.upper().startswith("  CPLAYER: MPLAYER2"):
+                self.info("Mplayer v2 found")
+                self.version=2
+            elif line.upper().startswith("  CPLAYER: MPLAYER "):
+                self.info("Mplayer v1 found")
+                self.version=1
         if line.startswith("   GLOBAL: ANS_"):
             line = line[10:]
             if self.current_callback:
@@ -96,8 +106,8 @@ class MPlayerProtocol(protocol.ProcessProtocol, LineOnlyReceiver, log.Loggable):
         self._callback_queue.put(d)
         return d
         
-    def send_command(self,command, deferred = None, keep_pause="pausing_keep"):
-        if keep_pause:
+    def send_command(self,command, deferred = None, keep_pause=default_pause):
+        if self.version==1 and keep_pause:
             cmd = keep_pause + ' ' + command + '\n'
         else:
             cmd = command + '\n'
@@ -105,12 +115,12 @@ class MPlayerProtocol(protocol.ProcessProtocol, LineOnlyReceiver, log.Loggable):
         self.send_queue.put_nowait((cmd,deferred))
         self.do_commands()
         
-    def send_command_with_reply(self,command, keep_pause="pausing_keep"):
+    def send_command_with_reply(self,command, keep_pause=default_pause):
         dfr = defer.Deferred()
-        self.send_command(command, dfr)
+        self.send_command(command, dfr, keep_pause)
         return dfr
         
-    def get_property(self, prop, keep_pause="pausing_keep"):
+    def get_property(self, prop, keep_pause=default_pause):
         d = self.send_command_with_reply('get_property ' + prop, keep_pause)
         d.addCallback(self.process_property, prop=prop)
         return d
@@ -123,7 +133,7 @@ class MPlayerProtocol(protocol.ProcessProtocol, LineOnlyReceiver, log.Loggable):
         else:
             raise MPlayerError(response.replace('ANS_ERROR=',''))
             
-    def set_property(self, prop, value, keep_pause="pausing_keep"):
+    def set_property(self, prop, value, keep_pause=default_pause):
         self.send_command('set_property ' + prop + ' ' + str(value), keep_pause=keep_pause)
         
 class Player(log.Loggable):
@@ -225,13 +235,20 @@ class Player(log.Loggable):
 
     def pause(self, on=True):
         self.debug("pause --> %r", self.get_uri())
-        if on:
-            self.player.send_command('pause', keep_pause='pausing')
-            self.state = "PAUSED"
+        if self.player.version==1:
+            if on:
+                self.player.send_command('pause', keep_pause='pausing_keep_force')
+                self.state = "PAUSED"
+            else:
+                self.player.send_command('seek 0', keep_pause=False)
+                self.state = "PLAYING"
         else:
-            self.player.send_command('pause', keep_pause='pausing')
-            self.player.send_command('pause', keep_pause=False)
-            self.state = "PLAYING"
+            if on:
+                self.player.set_property('pause','yes')
+                self.state = "PAUSED"
+            else:
+                self.player.set_property('pause','no')
+                self.state = "PLAYING"
         self.debug("pause <--")
 
     def stop(self):
