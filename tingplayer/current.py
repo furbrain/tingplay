@@ -77,7 +77,7 @@ class CurrentPanel(gui.Panel):
         self.position_slider = gui.Slider(self.position_label.rect.topright,(right-100,20),align="topleft",parent=self)
         self.duration_label = gui.StaticText((MAIN_PANEL.width,MAIN_PANEL.height),(50,20),align="bottomright",label="--:--",parent=self)
         self.play_button = gui.Button((right/2,self.position_label.rect.top),(50,30),align="bottom",
-                                      label="image:images/play.png",parent=self)
+                                      label="image:images/play.png",parent=self, callback=self.pause)
         self.prev_button = gui.Button(self.play_button.rect.bottomleft,(50,30),align="bottomright",
                                       label="image:images/start.png",parent=self)
                                       
@@ -209,12 +209,26 @@ class CurrentPanel(gui.Panel):
                     print err
                     gui.message_box(message=err)
                 self.start_position_timer()
+                self.play_button.label="image:images/pause.png"
             self.update(downwards=True)
+            
+    def pause(self):
+        print self.transport_state
+        if self.transport_state=="PLAYING":
+            self.renderer.av_transport.pause(instance_id=self.avt_id)
+            self.play_button.label="image:images/play.png"
+            self.play_button.update()
+        elif self.transport_state=="PAUSED_PLAYBACK":
+            self.renderer.av_transport.play(instance_id=self.avt_id)
+            self.play_button.label="image:images/pause.png"
+            self.play_button.update()
     
     def stop(self):
         self.stop_timer()
         if self.transport_state=="PLAYING":
             self.renderer.av_transport.stop(instance_id=self.avt_id)
+            self.play_button.label="image:images/play.png"
+            self.play_button.update()
         
            
     def add_renderer(self,client, udn):
