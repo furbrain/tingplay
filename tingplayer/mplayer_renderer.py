@@ -715,8 +715,6 @@ class MPlayerPlayer(log.Loggable, Plugin):
         InstanceID = int(kwargs['InstanceID'])
         Unit = kwargs['Unit']
         Target = kwargs['Target']
-        if InstanceID != 0:
-            return failure.Failure(errorCode(718))
         if Unit in ['ABS_TIME', 'REL_TIME']:
             old_state = self.server.av_transport_server.get_variable('TransportState').value
             self.server.av_transport_server.set_variable(InstanceID, 'TransportState', 'TRANSITIONING')

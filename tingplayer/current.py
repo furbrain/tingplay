@@ -18,8 +18,8 @@ def hms_to_seconds(value):
     
 def seconds_to_hms(value):
     value = int(value)
-    return ("%d:%02d:%02d" % (value/3600,) + divmod(value%3600,60))
-    
+    return ("%d:%02d:%02d" % ((value/3600,) + divmod(value%3600,60)))
+
 def seconds_to_ms(value):
     """convert seconds to minutes:seconds"""
     value = int(value)
@@ -74,7 +74,7 @@ class CurrentPanel(gui.Panel):
                                         parent=self,callback=self.volume_cb, release_callback = self.final_volume_cb)
         self.volume_label = gui.StaticText(self.volume_slider.rect.bottomright,(50,20),align="topright",label="Vol: --",parent=self)
         self.position_label = gui.StaticText((0,MAIN_PANEL.height),(50,20),align="bottomleft",label="--:--",parent=self)
-        self.position_slider = gui.Slider(self.position_label.rect.topright,(right-100,20),align="topleft",parent=self)
+        self.position_slider = gui.Slider(self.position_label.rect.topright,(right-100,20),align="topleft",parent=self,callback=self.show_seek_pos,release_callback=self.seek)
         self.duration_label = gui.StaticText((MAIN_PANEL.width,MAIN_PANEL.height),(50,20),align="bottomright",label="--:--",parent=self)
         self.play_button = gui.Button((right/2,self.position_label.rect.top),(50,30),align="bottom",
                                       label="image:images/play.png",parent=self, callback=self.pause)
@@ -151,10 +151,11 @@ class CurrentPanel(gui.Panel):
             secs = hms_to_seconds(value)
         except ValueError:
             return
-        self.position_slider.value = secs
-        self.position_slider.update()
-        self.position_label.label = seconds_to_ms(secs)
-        self.position_label.update()
+        if not self.position_slider.pressed:
+            self.position_slider.value = secs
+            self.position_slider.update()
+            self.position_label.label = seconds_to_ms(secs)
+            self.position_label.update()
         
     def volume_cb(self,value):
         self.volume_label.label = "Vol: %d" % int(value)
@@ -213,7 +214,6 @@ class CurrentPanel(gui.Panel):
             self.update(downwards=True)
             
     def pause(self):
-        print self.transport_state
         if self.transport_state=="PLAYING":
             self.renderer.av_transport.pause(instance_id=self.avt_id)
             self.play_button.label="image:images/play.png"
@@ -222,6 +222,17 @@ class CurrentPanel(gui.Panel):
             self.renderer.av_transport.play(instance_id=self.avt_id)
             self.play_button.label="image:images/pause.png"
             self.play_button.update()
+    
+    def show_seek_pos(self,value):
+        value = seconds_to_ms(value)
+        self.position_label.label=value
+        self.position_label.update()
+    
+    def seek(self,value):
+        value = seconds_to_hms(value)
+        self.renderer.av_transport.seek(instance_id=self.avt_id,
+                                        unit="ABS_TIME",
+                                        target=value)
     
     def stop(self):
         self.stop_timer()
