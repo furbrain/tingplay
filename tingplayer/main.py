@@ -95,7 +95,10 @@ try:
     tingbot.run()
 finally:
     print "closing server"
-    reactor.stop()
+    try:
+        reactor.stop()
+    except twisted.internet.error.ReactorNotRunning:
+        pass
     print "clearing the queue"
     for i in range(30):
         time.sleep(0.03)
