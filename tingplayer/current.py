@@ -1,3 +1,4 @@
+from xml.etree.cElementTree import ParseError
 from twisted.internet import defer
 from collections import namedtuple
 import pygame.transform
@@ -75,6 +76,7 @@ class CurrentPanel(gui.Panel):
             Watcher('av_transport', 'CurrentTrackDuration', 'set_duration'),
             Watcher('av_transport', 'TransportState', 'transport_state_changed'),
             Watcher('av_transport', 'AVTransportURI','URI_changed'),
+            Watcher('av_transport', 'AVTransportURIMetaData','show_current_track'),
             Watcher('rendering_control', 'Volume','set_volume')]
 
     def __init__(self):
@@ -225,10 +227,6 @@ class CurrentPanel(gui.Panel):
             library = track['library']
             track = track['track']
             self.track = track
-            self.title.label = track.title
-            self.artist.label = track.artist
-            self.album.label = track.album
-            self.album_art.set_art(track.albumArtURI)
             if self.renderer:
                 self.track_url, meta_data = get_url_metadata(track, self.protocols)
                 try:
@@ -251,6 +249,7 @@ class CurrentPanel(gui.Panel):
                                         current_uri=self.track_url,
                                         current_uri_metadata=metadata.toString())
                     yield self.renderer.av_transport.play(instance_id=self.avt_id)
+                    self.show_current_track(metadata)
                     self.locally_controlled = True
                 except Exception as err:
                     print("Exception received")
@@ -269,7 +268,27 @@ class CurrentPanel(gui.Panel):
             self.renderer.av_transport.play(instance_id=self.avt_id)
             self.play_button.label = "image:images/pause.png"
             self.play_button.update()
-
+            
+    def show_current_track(self, variable):
+        try:
+            item = variable.getItems()[0]
+        except AttributeError:
+            md = variable.value
+            if md=="NOT_IMPLEMENTED":
+                return
+            try:
+                md = DIDLLite.DIDLElement.fromString(md)
+            except ParseError:
+                return
+            item = md.getItems()[0]
+        print "Playing " + item.title
+        self.title.label = item.title
+        self.artist.label = item.artist
+        self.album.label = item.album
+        self.album_art.set_art(item.albumArtURI)
+        self.update(downwards=True)
+        
+        
     def show_seek_pos(self, value):
         value = seconds_to_ms(value)
         self.position_label.label = value
@@ -306,6 +325,8 @@ class CurrentPanel(gui.Panel):
                 if abs(self.duration - self.current_time) < 3:
                     self.playlist.next_track()
             except ValueError:
+                pass
+
     def URI_changed(self,variable):
         if variable.value != self.track_url:
             self.locally_controlled = False

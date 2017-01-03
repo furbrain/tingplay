@@ -18,7 +18,6 @@ class PlaylistPanel(gui.ScrollArea):
         
     def click_track(self,index):
         self.current_track = index
-        print "Playing " + self.playlist[index]['track'].title
         self.current_panel.play(self.playlist[index])
         self.refresh_list()
         
