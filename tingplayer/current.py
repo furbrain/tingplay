@@ -74,6 +74,7 @@ class CurrentPanel(gui.Panel):
             Watcher('av_transport', 'RelativeTimePosition', 'set_track_pos'),
             Watcher('av_transport', 'CurrentTrackDuration', 'set_duration'),
             Watcher('av_transport', 'TransportState', 'transport_state_changed'),
+            Watcher('av_transport', 'AVTransportURI','URI_changed'),
             Watcher('rendering_control', 'Volume','set_volume')]
 
     def __init__(self):
@@ -229,7 +230,7 @@ class CurrentPanel(gui.Panel):
             self.album.label = track.album
             self.album_art.set_art(track.albumArtURI)
             if self.renderer:
-                track_url, meta_data = get_url_metadata(track, self.protocols)
+                self.track_url, meta_data = get_url_metadata(track, self.protocols)
                 try:
                     if self.renderer.connection_manager.service.get_action('PrepareForConnection'):
                         connection_manager_id = library.connection_manager.connection_manager_id()
@@ -247,7 +248,7 @@ class CurrentPanel(gui.Panel):
                     metadata.addItem(track)
                     yield self.renderer.av_transport.set_av_transport_uri(
                                         instance_id=self.avt_id,
-                                        current_uri=track_url,
+                                        current_uri=self.track_url,
                                         current_uri_metadata=metadata.toString())
                     yield self.renderer.av_transport.play(instance_id=self.avt_id)
                     self.locally_controlled = True
@@ -305,3 +306,7 @@ class CurrentPanel(gui.Panel):
                 if abs(self.duration - self.current_time) < 3:
                     self.playlist.next_track()
             except ValueError:
+    def URI_changed(self,variable):
+        if variable.value != self.track_url:
+            self.locally_controlled = False
+        pass
