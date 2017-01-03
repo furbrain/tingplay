@@ -1,4 +1,5 @@
 from twisted.internet import defer
+from collections import namedtuple
 import pygame.transform
 import time
 
@@ -68,6 +69,13 @@ class AlbumArtViewer(gui.Dialog):
 
 
 class CurrentPanel(gui.Panel):
+    Watcher = namedtuple('Watcher',['service','variable','method'])
+    variable_watchers = [
+            Watcher('av_transport', 'RelativeTimePosition', 'set_track_pos'),
+            Watcher('av_transport', 'CurrentTrackDuration', 'set_duration'),
+            Watcher('av_transport', 'TransportState', 'transport_state_changed'),
+            Watcher('rendering_control', 'Volume','set_volume')]
+
     def __init__(self):
         right, bottom = MAIN_PANEL.size
         super(CurrentPanel, self).__init__(MAIN_PANEL.topleft, MAIN_PANEL.size, align="topleft")
@@ -141,16 +149,16 @@ class CurrentPanel(gui.Panel):
             return
         if self.renderer:
             # unsubscribe previous subs
-            utils.disconnect_variable(self.renderer.av_transport, 'RelativeTimePosition', self.set_track_pos)
-            utils.disconnect_variable(self.renderer.av_transport, 'CurrentTrackDuration', self.set_duration)
-            utils.disconnect_variable(self.renderer.av_transport, 'TransportState', self.transport_state_changed)
-            utils.disconnect_variable(self.renderer.rendering_control, 'Volume', self.set_volume)
+            for w in self.variable_watchers:
+                utils.disconnect_variable(getattr(self.renderer,w.service), 
+                                          w.variable,
+                                          getattr(self,w.method))
 
         self.renderer = renderer
-        utils.connect_variable(self.renderer.av_transport, 'RelativeTimePosition', self.set_track_pos)
-        utils.connect_variable(self.renderer.av_transport, 'CurrentTrackDuration', self.set_duration)
-        utils.connect_variable(self.renderer.av_transport, 'TransportState', self.transport_state_changed)
-        utils.connect_variable(self.renderer.rendering_control, 'Volume', self.set_volume)
+        for w in self.variable_watchers:
+            utils.connect_variable(getattr(self.renderer,w.service), 
+                                      w.variable,
+                                      getattr(self,w.method))
         volume_variable = self.renderer.rendering_control.service.get_state_variable('Volume')
         self.volume_slider.max_val = int(volume_variable.allowed_value_range['maximum'])
         self.volume_slider.update()
