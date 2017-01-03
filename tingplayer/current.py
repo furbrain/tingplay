@@ -137,6 +137,10 @@ class CurrentPanel(gui.Panel):
         self.play_timer = None
         self.protocols = []
         self.init_time = time.time()
+        self.duration = None
+        self.current_time = None
+        self.track_url = None
+        self.locally_controlled = False
 
     @defer.inlineCallbacks
     def set_renderer(self, name, renderer):
@@ -180,22 +184,22 @@ class CurrentPanel(gui.Panel):
 
     def set_duration(self, variable):
         value = variable.value
-        secs = hms_to_seconds(value)
-        if secs:
-            self.position_slider.max_val = secs
-            self.duration_label.label = seconds_to_ms(secs)
+        self.duration = hms_to_seconds(value)
+        if self.duration:
+            self.position_slider.max_val = self.duration
+            self.duration_label.label = seconds_to_ms(self.duration)
             self.duration_label.update()
 
     def set_track_pos(self, variable):
         value = variable.value
         try:
-            secs = hms_to_seconds(value)
+            self.current_time = hms_to_seconds(value)
         except ValueError:
             return
         if not self.position_slider.pressed:
-            self.position_slider.value = secs
+            self.position_slider.value = self.current_time
             self.position_slider.update()
-            self.position_label.label = seconds_to_ms(secs)
+            self.position_label.label = seconds_to_ms(self.current_time)
             self.position_label.update()
 
     def volume_cb(self, value):
@@ -246,6 +250,7 @@ class CurrentPanel(gui.Panel):
                                         current_uri=track_url,
                                         current_uri_metadata=metadata.toString())
                     yield self.renderer.av_transport.play(instance_id=self.avt_id)
+                    self.locally_controlled = True
                 except Exception as err:
                     print("Exception received")
                     print(err)
@@ -295,11 +300,8 @@ class CurrentPanel(gui.Panel):
 
     def transport_state_changed(self, variable):
         self.transport_state = variable.value
-        if variable.value == "STOPPED":
-            rt = self.renderer.av_transport.service.get_state_variable('RelativeTimePosition')
-            td = self.renderer.av_transport.service.get_state_variable('CurrentTrackDuration')
-            if rt and td and rt.value and td.value:
-                rt = hms_to_seconds(rt.value)
-                td = hms_to_seconds(td.value)
-                if abs(td - rt) < 3:
+        if variable.value == "STOPPED" and self.locally_controlled:
+            try:
+                if abs(self.duration - self.current_time) < 3:
                     self.playlist.next_track()
+            except ValueError:
