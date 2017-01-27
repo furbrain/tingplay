@@ -914,6 +914,6 @@ if __name__ == '__main__':
     if test=="Plugin":
         plugs = Plugins()
         plugs['MPlayerPlayer'] = MPlayerPlayer
-        c = Coherence({'logmode':'warning',
+        c = Coherence({'logmode':'info',
                        'plugins':{'MPlayerPlayer': {'name':'Tingbot'}}})
     reactor.run()
