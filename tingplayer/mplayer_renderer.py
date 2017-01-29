@@ -153,7 +153,7 @@ class Player(log.Loggable):
             if v is not None:
                 args += [v]
         self.debug("MPlayer args: %r" % args)
-        self.player = MPlayerProtocol(lambda: self.update("STOPPED"))
+        self.player = MPlayerProtocol(self.track_finished)
         reactor.spawnProcess(self.player, 
                              executable = '/usr/bin/mplayer',
                              args=args,
@@ -258,6 +258,10 @@ class Player(log.Loggable):
         self.state = "STOPPED"
         self.update(message="STOPPED")
         self.debug("stop <-- %r ", self.get_uri())
+        
+    def track_finished(self):
+        self.state = "STOPPED"
+        self.update(message="STOPPED")
         
     def seek(self, location):
         """
@@ -456,7 +460,7 @@ class MPlayerPlayer(log.Loggable, Plugin):
             else:
                 mimetype = 'audio/mpeg'
         self.player.load(uri, mimetype)
-
+        self.duration = None
         self.metadata = metadata
         self.mimetype = mimetype
         self.tags = {}

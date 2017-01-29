@@ -142,7 +142,7 @@ class CurrentPanel(gui.Panel):
         self.init_time = time.time()
         self.duration = None
         self.current_time = None
-        self.track_url = None
+        self.track_url = ''
         self.locally_controlled = False
 
     @defer.inlineCallbacks
@@ -251,6 +251,8 @@ class CurrentPanel(gui.Panel):
                     yield self.renderer.av_transport.play(instance_id=self.avt_id)
                     self.show_current_track(metadata)
                     self.locally_controlled = True
+                    self.current_time = 0
+                    self.duration = None
                 except Exception as err:
                     print("Exception received")
                     print(err)
@@ -323,8 +325,10 @@ class CurrentPanel(gui.Panel):
         if variable.value == "STOPPED" and self.locally_controlled:
             try:
                 if abs(self.duration - self.current_time) < 3:
+                    self.duration = None
+                    self.current_time = 0
                     self.playlist.next_track()
-            except ValueError:
+            except (ValueError, TypeError):
                 pass
 
     def URI_changed(self,variable):
