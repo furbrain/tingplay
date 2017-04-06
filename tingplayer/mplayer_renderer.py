@@ -334,15 +334,15 @@ class MPlayerPlayer(log.Loggable, Plugin):
         conn_id = connection_manager.lookup_avt_id(self.current_connection_id)
         if current == "PLAYING":
             state = 'playing'
-            av_transport.set_variable(conn_id, 'TransportState', 'PLAYING')
+            av_transport.set_variable(0, 'TransportState', 'PLAYING')
         elif current == "PAUSED":
             state = 'paused'
-            av_transport.set_variable(conn_id, 'TransportState',
+            av_transport.set_variable(0, 'TransportState',
                                       'PAUSED_PLAYBACK')
         elif self.playcontainer != None and message == "STOPPED" and \
              self.playcontainer[0] + 1 < len(self.playcontainer[2]):
             state = 'transitioning'
-            av_transport.set_variable(conn_id, 'TransportState', 'TRANSITIONING')
+            av_transport.set_variable(0, 'TransportState', 'TRANSITIONING')
 
             next_track = ()
             item = self.playcontainer[2][self.playcontainer[0] + 1]
@@ -362,22 +362,22 @@ class MPlayerPlayer(log.Loggable, Plugin):
                 self.playcontainer[0] = self.playcontainer[0] + 1
 
             if len(next_track) == 3:
-                av_transport.set_variable(conn_id, 'CurrentTrack',
+                av_transport.set_variable(0, 'CurrentTrack',
                                           self.playcontainer[0] + 1)
                 self.load(next_track[0], next_track[1], next_track[2])
                 self.play()
             else:
                 state = 'idle'
-                av_transport.set_variable(conn_id, 'TransportState', 'STOPPED')
+                av_transport.set_variable(0, 'TransportState', 'STOPPED')
         elif message == "STOPPED" and \
              len(av_transport.get_variable('NextAVTransportURI').value) > 0:
             state = 'transitioning'
-            av_transport.set_variable(conn_id, 'TransportState', 'TRANSITIONING')
+            av_transport.set_variable(0, 'TransportState', 'TRANSITIONING')
             CurrentURI = av_transport.get_variable('NextAVTransportURI').value
             metadata = av_transport.get_variable('NextAVTransportURIMetaData')
             CurrentURIMetaData = metadata.value
-            av_transport.set_variable(conn_id, 'NextAVTransportURI', '')
-            av_transport.set_variable(conn_id, 'NextAVTransportURIMetaData', '')
+            av_transport.set_variable(0, 'NextAVTransportURI', '')
+            av_transport.set_variable(0, 'NextAVTransportURIMetaData', '')
             r = self.upnp_SetAVTransportURI(self, InstanceID=0,
                                             CurrentURI=CurrentURI,
                                             CurrentURIMetaData=CurrentURIMetaData)
@@ -385,10 +385,10 @@ class MPlayerPlayer(log.Loggable, Plugin):
                 self.play()
             else:
                 state = 'idle'
-                av_transport.set_variable(conn_id, 'TransportState', 'STOPPED')
+                av_transport.set_variable(0, 'TransportState', 'STOPPED')
         else:
             state = 'idle'
-            av_transport.set_variable(conn_id, 'TransportState', 'STOPPED')
+            av_transport.set_variable(0, 'TransportState', 'STOPPED')
 
         self.info("update %r", state)
         self._update_transport_position()
@@ -418,10 +418,10 @@ class MPlayerPlayer(log.Loggable, Plugin):
 
                     self.metadata = elt.toString()
                     if self.server != None:
-                        av_transport.set_variable(conn_id,
+                        av_transport.set_variable(0,
                                                   'AVTransportURIMetaData',
                                                   self.metadata)
-                        av_transport.set_variable(conn_id,
+                        av_transport.set_variable(0,
                                                   'CurrentTrackMetaData',
                                                   self.metadata)
 
@@ -436,15 +436,15 @@ class MPlayerPlayer(log.Loggable, Plugin):
                       position[u'human'][u'duration'])
 
             formatted = format_time(position[u'raw'][u'duration'])
-            av_transport.set_variable(conn_id, 'CurrentTrackDuration', formatted)
-            av_transport.set_variable(conn_id, 'CurrentMediaDuration', formatted)
+            av_transport.set_variable(0, 'CurrentTrackDuration', formatted)
+            av_transport.set_variable(0, 'CurrentMediaDuration', formatted)
 
             formatted = format_time(position[u'raw'][u'position'])
             counter = position[u'raw'][u'position']
-            av_transport.set_variable(conn_id, 'RelativeTimePosition', formatted)
-            av_transport.set_variable(conn_id, 'AbsoluteTimePosition', formatted)
-            av_transport.set_variable(conn_id, 'RelativeCounterPosition', counter)
-            av_transport.set_variable(conn_id, 'AbsoluteCounterPosition', counter)
+            av_transport.set_variable(0, 'RelativeTimePosition', formatted)
+            av_transport.set_variable(0, 'AbsoluteTimePosition', formatted)
+            av_transport.set_variable(0, 'RelativeCounterPosition', counter)
+            av_transport.set_variable(0, 'AbsoluteCounterPosition', counter)
 
 
     def load(self, uri, metadata, mimetype=None):
@@ -466,20 +466,20 @@ class MPlayerPlayer(log.Loggable, Plugin):
         self.tags = {}
 
         if self.playcontainer == None:
-            self.server.av_transport_server.set_variable(connection_id, 'AVTransportURI', uri)
-            self.server.av_transport_server.set_variable(connection_id, 'AVTransportURIMetaData', metadata)
-            self.server.av_transport_server.set_variable(connection_id, 'NumberOfTracks', 1)
-            self.server.av_transport_server.set_variable(connection_id, 'CurrentTrack', 1)
+            self.server.av_transport_server.set_variable(0, 'AVTransportURI', uri)
+            self.server.av_transport_server.set_variable(0, 'AVTransportURIMetaData', metadata)
+            self.server.av_transport_server.set_variable(0, 'NumberOfTracks', 1)
+            self.server.av_transport_server.set_variable(0, 'CurrentTrack', 1)
         else:
-            self.server.av_transport_server.set_variable(connection_id, 'AVTransportURI', self.playcontainer[1])
-            self.server.av_transport_server.set_variable(connection_id, 'NumberOfTracks', len(self.playcontainer[2]))
-            self.server.av_transport_server.set_variable(connection_id, 'CurrentTrack', self.playcontainer[0] + 1)
+            self.server.av_transport_server.set_variable(0, 'AVTransportURI', self.playcontainer[1])
+            self.server.av_transport_server.set_variable(0, 'NumberOfTracks', len(self.playcontainer[2]))
+            self.server.av_transport_server.set_variable(0, 'CurrentTrack', self.playcontainer[0] + 1)
 
-        self.server.av_transport_server.set_variable(connection_id, 'CurrentTrackURI', uri)
-        self.server.av_transport_server.set_variable(connection_id, 'CurrentTrackMetaData', metadata)
+        self.server.av_transport_server.set_variable(0, 'CurrentTrackURI', uri)
+        self.server.av_transport_server.set_variable(0, 'CurrentTrackMetaData', metadata)
 
-        #self.server.av_transport_server.set_variable(connection_id, 'TransportState', 'TRANSITIONING')
-        #self.server.av_transport_server.set_variable(connection_id, 'CurrentTransportActions','PLAY,STOP,PAUSE,SEEK,NEXT,PREVIOUS')
+        #self.server.av_transport_server.set_variable(0, 'TransportState', 'TRANSITIONING')
+        #self.server.av_transport_server.set_variable(0, 'CurrentTransportActions','PLAY,STOP,PAUSE,SEEK,NEXT,PREVIOUS')
         if uri.startswith('http://'):
             transport_actions = Set(['PLAY,STOP,PAUSE'])
         else:
@@ -494,7 +494,7 @@ class MPlayerPlayer(log.Loggable, Plugin):
             if self.playcontainer[0] > 0:
                 transport_actions.add('PREVIOUS')
 
-        self.server.av_transport_server.set_variable(connection_id, 'CurrentTransportActions', transport_actions)
+        self.server.av_transport_server.set_variable(0, 'CurrentTransportActions', transport_actions)
 
         if state == "PLAYING":
             self.info("was playing...")
@@ -513,19 +513,19 @@ class MPlayerPlayer(log.Loggable, Plugin):
         if self.player.get_state() in ["PLAYING", "PAUSED"]:
             self.player.stop()
             if silent is True:
-                self.server.av_transport_server.set_variable(self.server.connection_manager_server.lookup_avt_id(self.current_connection_id), 'TransportState', 'STOPPED')
+                self.server.av_transport_server.set_variable(0, 'TransportState', 'STOPPED')
 
     def play(self):
         self.info("Playing: %r", self.player.get_uri())
         if self.player.get_uri() == None:
             return
         self.player.play()
-        self.server.av_transport_server.set_variable(self.server.connection_manager_server.lookup_avt_id(self.current_connection_id), 'TransportState', 'PLAYING')
+        self.server.av_transport_server.set_variable(0, 'TransportState', 'PLAYING')
 
     def pause(self):
         self.info('Pausing: %r', self.player.get_uri())
         self.player.pause()
-        self.server.av_transport_server.set_variable(self.server.connection_manager_server.lookup_avt_id(self.current_connection_id), 'TransportState', 'PAUSED_PLAYBACK')
+        self.server.av_transport_server.set_variable(0, 'TransportState', 'PAUSED_PLAYBACK')
 
     def seek(self, location, old_state):
         self.player.seek(location)
@@ -534,13 +534,11 @@ class MPlayerPlayer(log.Loggable, Plugin):
 
     def mute(self):
         self.player.mute()
-        rcs_id = self.server.connection_manager_server.lookup_rcs_id(self.current_connection_id)
-        self.server.rendering_control_server.set_variable(rcs_id, 'Mute', 'True')
+        self.server.rendering_control_server.set_variable(0, 'Mute', 'True')
 
     def unmute(self):
         self.player.unmute()
-        rcs_id = self.server.connection_manager_server.lookup_rcs_id(self.current_connection_id)
-        self.server.rendering_control_server.set_variable(rcs_id, 'Mute', 'False')
+        self.server.rendering_control_server.set_variable(0, 'Mute', 'False')
 
     def get_mute(self):
         return self.player.get_mute()
@@ -550,8 +548,7 @@ class MPlayerPlayer(log.Loggable, Plugin):
 
     def set_volume(self, volume):
         self.player.set_volume(volume)
-        rcs_id = self.server.connection_manager_server.lookup_rcs_id(self.current_connection_id)
-        self.server.rendering_control_server.set_variable(rcs_id, 'Volume', volume)
+        self.server.rendering_control_server.set_variable(0, 'Volume', volume)
 
     def playcontainer_browse(self, uri):
         """
@@ -721,7 +718,7 @@ class MPlayerPlayer(log.Loggable, Plugin):
         Target = kwargs['Target']
         if Unit in ['ABS_TIME', 'REL_TIME']:
             old_state = self.server.av_transport_server.get_variable('TransportState').value
-            self.server.av_transport_server.set_variable(InstanceID, 'TransportState', 'TRANSITIONING')
+            self.server.av_transport_server.set_variable(0, 'TransportState', 'TRANSITIONING')
 
             sign = ''
             if Target[0] == '+':
@@ -738,16 +735,16 @@ class MPlayerPlayer(log.Loggable, Plugin):
             if self.playcontainer == None:
                 NextURI = self.server.av_transport_server.get_variable('NextAVTransportURI', InstanceID).value
                 if NextURI != '':
-                    self.server.av_transport_server.set_variable(InstanceID, 'TransportState', 'TRANSITIONING')
+                    self.server.av_transport_server.set_variable(0, 'TransportState', 'TRANSITIONING')
                     NextURIMetaData = self.server.av_transport_server.get_variable('NextAVTransportURIMetaData').value
-                    self.server.av_transport_server.set_variable(InstanceID, 'NextAVTransportURI', '')
-                    self.server.av_transport_server.set_variable(InstanceID, 'NextAVTransportURIMetaData', '')
+                    self.server.av_transport_server.set_variable(0, 'NextAVTransportURI', '')
+                    self.server.av_transport_server.set_variable(0, 'NextAVTransportURIMetaData', '')
                     r = self.upnp_SetAVTransportURI(self, InstanceID=InstanceID, CurrentURI=NextURI, CurrentURIMetaData=NextURIMetaData)
                     return r
             else:
                 Target = int(Target)
                 if 0 < Target <= len(self.playcontainer[2]):
-                    self.server.av_transport_server.set_variable(InstanceID, 'TransportState', 'TRANSITIONING')
+                    self.server.av_transport_server.set_variable(0, 'TransportState', 'TRANSITIONING')
                     next_track = ()
                     item = self.playcontainer[2][Target - 1]
                     local_protocol_infos = self.server.connection_manager_server.get_variable('SinkProtocolInfo').value.split(',')
@@ -763,7 +760,7 @@ class MPlayerPlayer(log.Loggable, Plugin):
                         self.playcontainer[0] = Target - 1
 
                     if len(next_track) == 3:
-                        self.server.av_transport_server.set_variable(self.server.connection_manager_server.lookup_avt_id(self.current_connection_id), 'CurrentTrack', Target)
+                        self.server.av_transport_server.set_variable(0, 'CurrentTrack', Target)
                         self.load(next_track[0], next_track[1], next_track[2])
                         self.play()
                         return {}
@@ -786,21 +783,21 @@ class MPlayerPlayer(log.Loggable, Plugin):
         NextURI = kwargs['NextURI']
         current_connection_id = self.server.connection_manager_server.lookup_avt_id(self.current_connection_id)
         NextMetaData = kwargs['NextURIMetaData']
-        self.server.av_transport_server.set_variable(current_connection_id, 'NextAVTransportURI', NextURI)
-        self.server.av_transport_server.set_variable(current_connection_id, 'NextAVTransportURIMetaData', NextMetaData)
+        self.server.av_transport_server.set_variable(0, 'NextAVTransportURI', NextURI)
+        self.server.av_transport_server.set_variable(0, 'NextAVTransportURIMetaData', NextMetaData)
         if len(NextURI) == 0  and self.playcontainer == None:
             transport_actions = self.server.av_transport_server.get_variable('CurrentTransportActions').value
             transport_actions = Set(transport_actions.split(','))
             try:
                 transport_actions.remove('NEXT')
-                self.server.av_transport_server.set_variable(current_connection_id, 'CurrentTransportActions', transport_actions)
+                self.server.av_transport_server.set_variable(0, 'CurrentTransportActions', transport_actions)
             except KeyError:
                 pass
             return {}
         transport_actions = self.server.av_transport_server.get_variable('CurrentTransportActions').value
         transport_actions = Set(transport_actions.split(','))
         transport_actions.add('NEXT')
-        self.server.av_transport_server.set_variable(current_connection_id, 'CurrentTransportActions', transport_actions)
+        self.server.av_transport_server.set_variable(0, 'CurrentTransportActions', transport_actions)
         return {}
 
     def upnp_SetAVTransportURI(self, *args, **kwargs):
@@ -875,13 +872,22 @@ class MPlayerPlayer(log.Loggable, Plugin):
         defer.returnValue(r)            
 
 
+    def upnp_GetTransportInfo(self, *args, **kwargs):
+        r = {'CurrentSpeed':'1'} 
+        args = {
+            'CurrentTransportState':'TransportState',
+            'CurrentTransportStatus':'TransportStatus'}
+        for k,v in args.items():
+            r[k] = self.server.av_transport_server.get_variable(v).value
+        return r
+
 if __name__ == '__main__':
     from twisted.python import log as log2
     from coherence.base import Coherence, Plugins
     import sys
     log2.startLogging(sys.stdout)
 
-    test = "Plugin"
+    test = "Player"
     
     def printer(var):
         print var
@@ -901,19 +907,20 @@ if __name__ == '__main__':
     if test=="Player":
         p = Player()
         callLater(1,p.load,'a.mp3','audio/mp3')
-        callLater(3,p.seek,'+30')
-        show_results(5,p.query_position)
-        callLater(6,p.mute)
-        show_results(8,p.get_mute)
-        callLater(10,p.unmute)
-        show_results(10,p.get_mute)
-        show_results(12,p.get_volume)
-        callLater(14,p.set_volume,25)
-        show_results(16,p.get_volume)
-        callLater(18,p.pause)
-        callLater(20,p.play)
-        callLater(21.5,p.stop)
-        callLater(25,p.play)
+        #callLater(3,p.seek,'+30')
+        #show_results(5,p.query_position)
+        #callLater(6,p.mute)
+        #show_results(8,p.get_mute)
+        #callLater(10,p.unmute)
+        #show_results(10,p.get_mute)
+        #show_results(12,p.get_volume)
+        #callLater(14,p.set_volume,25)
+        #show_results(16,p.get_volume)
+        #callLater(18,p.pause)
+        callLater(2,p.play)
+        #callLater(21.5,p.stop)
+        #callLater(25,p.play)
+        callLater(3,p.seek,'225')
     
     if test=="Plugin":
         plugs = Plugins()
