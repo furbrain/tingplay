@@ -40,6 +40,20 @@ lib_panel = library.LibraryPanel(playlist_panel)
 nb = gui.NoteBook([(lib_button,lib_panel),(playlist_button,playlist_panel),(current_button,current_panel)])
 gui.get_root_widget().update(downwards=True)
 
+def change_volume(vol_up, button_pressed):
+    nb.selected = current_button
+    current_panel.change_volume(vol_up, button_pressed)
+
+#connect button events to widgets
+tingbot.left_button.press(current_panel.prev_track)
+tingbot.midleft_button.press(current_panel.next_track)
+
+tingbot.midright_button.down(lambda: change_volume(False,True))
+tingbot.midright_button.up(lambda: change_volume(False,False))
+tingbot.right_button.down(lambda: change_volume(True,True))
+tingbot.right_button.up(lambda: change_volume(True,False))
+
+
 def printer(device):
     print device
 

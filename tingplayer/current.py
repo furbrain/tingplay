@@ -113,10 +113,12 @@ class CurrentPanel(gui.Panel):
                                       callback=self.pause)
         self.prev_button = gui.Button(self.play_button.rect.bottomleft, (50, 30), align="bottomright",
                                       parent=self,
-                                      label="image:images/start.png")
+                                      label="image:images/start.png",
+                                      callback=self.prev_track)
         self.next_button = gui.Button(self.play_button.rect.bottomright, (50, 30), align="bottomleft",
                                       parent=self,
-                                      label="image:images/end.png")
+                                      label="image:images/end.png",
+                                      callback=self.next_track)
         self.title = gui.StaticText((3, 32), (MAIN_PANEL.width-22, 30), align="topleft",
                                     parent=self,
                                     label="Track Title",
@@ -144,6 +146,10 @@ class CurrentPanel(gui.Panel):
         self.current_time = None
         self.track_url = ''
         self.locally_controlled = False
+        self.volume_timer = None
+        self.rcs_id = 0
+        self.avt_id = 0
+        
 
     @defer.inlineCallbacks
     def set_renderer(self, name, renderer):
@@ -175,8 +181,6 @@ class CurrentPanel(gui.Panel):
 
     def set_playlist(self, playlist):
         self.playlist = playlist
-        self.prev_button.callback = self.playlist.previous_track
-        self.next_button.callback = self.playlist.next_track
 
     def set_volume(self, variable):
         value = variable.value
@@ -204,6 +208,36 @@ class CurrentPanel(gui.Panel):
             self.position_slider.update()
             self.position_label.label = seconds_to_ms(self.current_time)
             self.position_label.update()
+            
+    def next_track(self):
+        if self.locally_controlled:
+            self.playlist.next_track()
+            
+    def prev_track(self):
+        if self.locally_controlled:
+            self.playlist.previous_track()
+
+    def change_volume(self, vol_up, button_pressed, first=True):
+        # this function is called when a hardware button is pressed to change the volume
+        vol = self.volume_slider.value
+        if button_pressed:
+            if vol_up:
+                vol  = min(vol+1, self.volume_slider.max_val)
+            else:
+                vol = max(vol-1, 0)
+            self.volume_slider.value = vol
+            self.volume_cb(vol)
+            if first:
+                repeat_time = 1.0
+            else:
+                repeat_time = 0.2
+            self.volume_timer = self.create_timer(lambda: self.change_volume(vol_up, button_pressed, False), 
+                                                  repeat_time, repeating=False)
+        else:
+            if self.volume_timer:
+                self.volume_timer.stop()
+                self.volume_timer = None
+            self.final_volume_cb(self.volume_slider.value)
 
     def volume_cb(self, value):
         self.volume_label.label = "Vol: %d" % int(value)
