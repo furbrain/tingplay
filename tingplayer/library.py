@@ -66,11 +66,13 @@ class LibraryPanel(gui.Panel):
         d = self.browse(self.show_long_click_popup, object_id=container.id)
             
     def show_long_click_popup(self,tracks):
-        tracks = [{'library':self.library,'track':x} for x in tracks.getItems()]
-        gui.PopupMenu(xy = (100,60), menu_items = [
-            ("Play All",lambda: self.playlist_panel.play_tracks(tracks)),
-            ("Enqueue All",lambda: self.playlist_panel.enqueue_tracks(tracks))])
-        
+        tracks = [{'library':self.library,'track':x} for x in tracks.getItems() if isinstance(x,DIDLLite.Item)]
+        if tracks:
+            gui.PopupMenu(xy = (100,60), menu_items = [
+                ("Play All",lambda: self.playlist_panel.play_tracks(tracks)),
+                ("Enqueue All",lambda: self.playlist_panel.enqueue_tracks(tracks))])
+        else:
+            gui.message_box(message="Warning: no tracks found in this directory")        
         
     def show_browse_results(self,results):
         dir_style = self.style.copy()
