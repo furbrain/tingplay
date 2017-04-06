@@ -3,6 +3,7 @@ import urllib2
 from functools import partial
 
 from coherence.upnp.core import DIDLLite
+from twisted.internet import defer
 
 import tingbot_gui as gui
 import tingbot
@@ -32,13 +33,12 @@ class LibraryPanel(gui.Panel):
         
     def process_result(self, result):
         return DIDLLite.DIDLElement.fromString(result['Result'])
-        
-    def browse(self,callback,**kwargs):
-        d = self.library.content_directory.browse(process_result=False, **kwargs)
-        d.addCallback(self.process_result)
-        d.addCallbacks(callback,utils.errback)
-        return d
-            
+     
+    @defer.inlineCallbacks    
+    def browse(self,**kwargs):
+        result = yield self.library.content_directory.browse(process_result=False, **kwargs)
+        results = DIDLLite.DIDLElement.fromString(result['Result'])
+        defer.returnValue(results)            
         
     def library_selected(self,name,library):
         if library is None: return
@@ -46,26 +46,25 @@ class LibraryPanel(gui.Panel):
         tingbot.app.settings['last_server'] = name
         self.library=library
         self.browse_list = ["0"]
-        self.browse(self.show_browse_results)
+        self.show_browse_results()
                 
     def click_parent(self):
-        self.browse_list.pop()
-        self.browse(self.show_browse_results,object_id=self.browse_list[-1])
+        from_id = self.browse_list.pop()
+        self.show_browse_results(self.browse_list[-1], from_id=from_id)
         
     def click_container(self,container):
         obj_id = container.id
         self.browse_list.append(obj_id)
-        self.browse(self.show_browse_results,object_id=obj_id)
+        self.show_browse_results(obj_id)
 
     def click_item(self,item):
         gui.PopupMenu(xy = (100,60), menu_items = [
             ("Play",lambda: self.playlist_panel.play_tracks([item])),
             ("Enqueue",lambda: self.playlist_panel.enqueue_tracks([item]))])
               
+    @defer.inlineCallbacks          
     def long_click_container(self,container):
-        d = self.browse(self.show_long_click_popup, object_id=container.id)
-            
-    def show_long_click_popup(self,tracks):
+        tracks = yield self.browse(object_id=container.id)
         tracks = [{'library':self.library,'track':x} for x in tracks.getItems() if isinstance(x,DIDLLite.Item)]
         if tracks:
             gui.PopupMenu(xy = (100,60), menu_items = [
@@ -73,8 +72,10 @@ class LibraryPanel(gui.Panel):
                 ("Enqueue All",lambda: self.playlist_panel.enqueue_tracks(tracks))])
         else:
             gui.message_box(message="Warning: no tracks found in this directory")        
-        
-    def show_browse_results(self,results):
+
+    @defer.inlineCallbacks    
+    def show_browse_results(self, object_id="0", from_id=None):
+        results = yield self.browse(object_id=object_id)
         dir_style = self.style.copy()
         dir_style.button_text_color=(0,255,255)
         items = results.getItems()
@@ -92,6 +93,8 @@ class LibraryPanel(gui.Panel):
                             callback = self.click_parent)    
             index += 1
         for i in items:
+            if i.id==from_id:
+                self.entries.viewport.set_y(index*30)
             if 'container' in i.upnp_class:
                 gui.PopupButton((0,30*index), (300,30), align="topleft",
                                 parent=self.entries.scrolled_area,
@@ -106,6 +109,7 @@ class LibraryPanel(gui.Panel):
                                 label=i.title,
                                 callback = partial(self.click_item,r))
             index += 1
+        self.entries
         self.entries.update(downwards=True)
         
     def add_library(self, client, udn):
