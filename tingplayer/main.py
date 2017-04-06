@@ -3,6 +3,7 @@ import time
 import re
 import logging
 
+import twisted.internet.error
 from twisted.internet import _threadedselect, defer, utils
 _threadedselect.install()
 
