@@ -1,4 +1,7 @@
 {
     "name": "UPnP Player",
-    "author": "Phil Underwood"
+    "author": "Phil Underwood",
+    "caption": "UPnP/DNLA music controller/renderer",
+    "version": "1.0",
+    "website": "https://github.com/furbrain/tingplayer"
 }

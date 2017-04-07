@@ -1,4 +1,4 @@
-tingbot-gui>=0.9
+tingbot-gui>=0.9.3
 https://github.com/coherence-project/Coherence/tarball/a83d2061510c9d7b4b9b0ac472e839cadb5d5567
 twisted==16.6.0
 
